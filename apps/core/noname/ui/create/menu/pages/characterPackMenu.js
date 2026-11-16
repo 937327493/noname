@@ -467,29 +467,27 @@ export const characterPackMenu = function (connectMenu) {
 	}
 	rightPane.appendChild(active.link);
 
-	if (!connectMenu) {
-		// 下面使用了var的特性，请不要在这里直接改为let
-		var node1 = ui.create.div(".lefttext", "全部开启", start.firstChild, function () {
-			game.saveConfig(
-				"characters",
-				Object.keys(lib.characterPack).filter(mode => {
+	const packConfig = connectMenu ? "connect_characters" : "characters";
+	const enableAll = ui.create.div(".lefttext", "全部开启", start.firstChild, function () {
+		const packs = connectMenu
+			? []
+			: Object.keys(lib.characterPack).filter(mode => {
 					return !mode.startsWith("mode_") || (mode.startsWith("mode_extension_") && lib.config.all.stockextension.includes(mode.slice(15)));
-				})
-			);
-			updateNodes();
-		});
-		var node3 = ui.create.div(".lefttext", "全部关闭", start.firstChild, function () {
-			game.saveConfig("characters", []);
-			updateNodes();
-		});
-		var node2 = ui.create.div(".lefttext", "恢复默认", start.firstChild, function () {
-			game.saveConfig("characters", lib.config.defaultcharacters);
-			updateNodes();
-		});
-		node1.style.marginTop = "12px";
-		node3.style.marginTop = "7px";
-		node2.style.marginTop = "2px";
-	}
+				});
+		game.saveConfig(packConfig, packs);
+		updateNodes();
+	});
+	const disableAll = ui.create.div(".lefttext", "全部关闭", start.firstChild, function () {
+		game.saveConfig(packConfig, connectMenu ? lib.connectCharacterPack.slice() : []);
+		updateNodes();
+	});
+	const resetPacks = ui.create.div(".lefttext", "恢复默认", start.firstChild, function () {
+		game.saveConfig(packConfig, (connectMenu ? lib.config.defaultConnectCharacters : lib.config.defaultcharacters).slice());
+		updateNodes();
+	});
+	enableAll.style.marginTop = "12px";
+	disableAll.style.marginTop = "7px";
+	resetPacks.style.marginTop = "2px";
 
 	updateNodes();
 
@@ -505,10 +503,11 @@ export const characterPackMenu = function (connectMenu) {
 		}
 		// 显示不是无名杀自带的武将包
 		if (!lib.connectCharacterPack.includes(packName) && !lib.config.all.characters.includes(packName)) {
-			createModeConfig(packName, start.firstChild, node1);
+			createModeConfig(packName, start.firstChild, enableAll);
 			if (connectMenu) {
 				lib.connectCharacterPack.add(packName);
 			}
+			updateNodes();
 		}
 	};
 };

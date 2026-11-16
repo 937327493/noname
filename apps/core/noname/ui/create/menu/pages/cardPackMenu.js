@@ -248,7 +248,7 @@ export const cardPackMenu = function (connectMenu) {
 					}
 					// 原逻辑
 					else {
-						return lib.config.cards.includes(mode);
+						return connectMenu ? !lib.config.connect_cards.includes(mode) : lib.config.cards.includes(mode);
 					}
 				})(),
 				onclick: togglePack,
@@ -647,24 +647,22 @@ export const cardPackMenu = function (connectMenu) {
 		};
 	})();
 
-	if (!connectMenu) {
-		// 下面使用了var的特性，请不要在这里直接改为let
-		var node1 = ui.create.div(".lefttext", "全部开启", start.firstChild, function () {
-			game.saveConfig("cards", lib.config.all.cards);
-			updateNodes();
-		});
-		var node3 = ui.create.div(".lefttext", "全部关闭", start.firstChild, function () {
-			game.saveConfig("cards", []);
-			updateNodes();
-		});
-		var node2 = ui.create.div(".lefttext", "恢复默认", start.firstChild, function () {
-			game.saveConfig("cards", lib.config.defaultcards);
-			updateNodes();
-		});
-		node1.style.marginTop = "12px";
-		node3.style.marginTop = "7px";
-		node2.style.marginTop = "2px";
-	}
+	const packConfig = connectMenu ? "connect_cards" : "cards";
+	const enableAll = ui.create.div(".lefttext", "全部开启", start.firstChild, function () {
+		game.saveConfig(packConfig, connectMenu ? [] : lib.config.all.cards.slice());
+		updateNodes();
+	});
+	const disableAll = ui.create.div(".lefttext", "全部关闭", start.firstChild, function () {
+		game.saveConfig(packConfig, connectMenu ? lib.connectCardPack.slice() : []);
+		updateNodes();
+	});
+	const resetPacks = ui.create.div(".lefttext", "恢复默认", start.firstChild, function () {
+		game.saveConfig(packConfig, (connectMenu ? lib.config.defaultConnectCards : lib.config.defaultcards).slice());
+		updateNodes();
+	});
+	enableAll.style.marginTop = "12px";
+	disableAll.style.marginTop = "7px";
+	resetPacks.style.marginTop = "2px";
 
 	updateNodes();
 
@@ -681,11 +679,13 @@ export const cardPackMenu = function (connectMenu) {
 		// 显示不是无名杀自带的卡牌包
 		if (!lib.connectCardPack.includes(packName) && !lib.config.all.cards.includes(packName)) {
 			if (!(connectMenu && ["mode_derivation", "mode_banned"].includes(packName))) {
-				createModeConfig(packName, start.firstChild, node1);
+				const node = createModeConfig(packName, start.firstChild);
+				start.firstChild.insertBefore(node, enableAll);
 			}
 			if (connectMenu) {
 				lib.connectCardPack.add(packName);
 			}
+			updateNodes();
 		}
 	};
 };

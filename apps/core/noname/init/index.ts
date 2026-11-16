@@ -882,6 +882,8 @@ async function loadConfig() {
 	if (config.get("cards")) {
 		config.set("defaultcards", config.get("cards").slice());
 	}
+	config.set("defaultConnectCards", lib.config.connect_cards.slice());
+	config.set("defaultConnectCharacters", lib.config.connect_characters.slice());
 
 	for (const name in result) {
 		if (name.includes("_mode_config")) {
