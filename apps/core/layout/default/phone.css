@@ -65,6 +65,13 @@
 #system > div:not(.shown) > div {
 	pointer-events: none;
 }
+#system > #system2:not(.shown) > .connect-profile-button {
+	transform: translateY(80px);
+	pointer-events: auto;
+}
+.statusbar #system > #system2:not(.shown) > .connect-profile-button {
+	transform: translateY(120px);
+}
 #pausebutton,
 #autobutton,
 #restartbutton {

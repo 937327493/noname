@@ -1,4 +1,5 @@
 import { lib, game, ui, get, ai, _status } from "noname";
+import { createConnectProfileButton } from "@/ui/create/connect-profile.js";
 
 export const type = "mode";
 
@@ -8,6 +9,7 @@ export const type = "mode";
 export default {
 	name: "connect",
 	async start(event, trigger, player) {
+		createConnectProfileButton();
 		const rematchKey = lib.configprefix + "connectRematch";
 		const rematch = JSON.parse(sessionStorage.getItem(rematchKey) ?? "null");
 		sessionStorage.removeItem(rematchKey);

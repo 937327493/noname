@@ -1973,9 +1973,14 @@ export class Game {
 		}
 		const nickname = get.connectNickname();
 		const avatar = lib.config.connect_avatar;
-		game.send("server", "changeAvatar", nickname, avatar);
+		const inLobby = game.onlinehall && !game.roomId && !game.me && !game.observe;
+		if (game.ws?.readyState === WebSocket.OPEN && (game.onlineroom || inLobby)) {
+			game.send("server", "changeAvatar", nickname, avatar);
+		}
 		if (game.online) {
-			game.send("changeProfile", nickname, avatar);
+			if (!inLobby && !game.observe && game.ws?.readyState === WebSocket.OPEN) {
+				game.send("changeProfile", nickname, avatar);
+			}
 		} else if (_status.waitingForPlayer && game.connectPlayers?.length) {
 			game.connectPlayers[0].initOL(nickname, avatar);
 			game.updateWaiting();

@@ -140,6 +140,7 @@ export const NonameConfig = {
 			} else if (config.input) {
 				const input = this.$refs.input;
 				if (config.name == "联机昵称") {
+					input.dataset.connectProfileField = "nickname";
 					input.innerHTML = config.init || "无名玩家";
 					input.onblur = function () {
 						input.innerHTML = input.innerHTML.replace(/<br>/g, "");
@@ -152,6 +153,7 @@ export const NonameConfig = {
 						game.syncConnectProfile();
 					};
 				} else if (config.name == "联机头像") {
+					input.dataset.connectProfileField = "avatar";
 					// 显示当前配置的武将名称（直接使用翻译，不额外添加前缀）
 					const currentId = lib.config.connect_avatar || config.init || "caocao";
 					input.innerHTML = lib.translate[currentId] || "曹操";

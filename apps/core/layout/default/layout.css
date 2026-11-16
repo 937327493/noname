@@ -1057,6 +1057,80 @@ table {
 	transition: all 0.1s;
 }
 
+#system2 > .connect-profile-button {
+	float: right;
+}
+.connect-profile-dialog {
+	box-sizing: border-box;
+	width: min(420px, calc(100vw - 24px));
+	max-height: calc(100vh - 24px);
+	padding: 20px;
+	overflow: auto;
+	color: #f6f0e5;
+	background: #292720;
+	border: 1px solid #83735a;
+	border-radius: 10px;
+	box-shadow: 0 12px 36px #0008;
+}
+.connect-profile-dialog::backdrop {
+	background: #0008;
+}
+.connect-profile-dialog form,
+.connect-profile-picker {
+	display: grid;
+	gap: 8px;
+}
+.connect-profile-dialog h2,
+.connect-profile-dialog p {
+	margin: 0;
+}
+.connect-profile-dialog div {
+	position: static;
+	transition: none;
+}
+.connect-profile-dialog input,
+.connect-profile-dialog select,
+.connect-profile-dialog button {
+	box-sizing: border-box;
+	min-width: 0;
+	color: inherit;
+	font: inherit;
+	background: #3a352b;
+	border: 1px solid #83735a;
+	border-radius: 4px;
+	padding: 6px 8px;
+}
+.connect-profile-dialog input::placeholder {
+	color: #c2b8a5;
+}
+.connect-profile-avatar {
+	display: grid;
+	grid-template-columns: 64px minmax(0, 1fr);
+	gap: 12px;
+}
+.connect-profile-preview {
+	height: 84px;
+	background-position: center;
+	background-size: cover;
+	border-radius: 4px;
+}
+.connect-profile-results {
+	font-size: 12px;
+}
+.connect-profile-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 8px;
+}
+.connect-profile-actions button {
+	cursor: pointer;
+}
+.connect-profile-actions button[type="submit"] {
+	color: #271d0e;
+	background: #d6b778;
+}
+
 .pausedbg {
 	left: 0;
 	top: 0;
