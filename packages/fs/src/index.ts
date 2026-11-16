@@ -73,11 +73,29 @@ export default function createApp(config: Partial<typeof defaultConfig> = {}) {
 		methods: ["GET", "POST", "OPTIONS"],
 	});
 
+	app.addHook("onSend", async (request, reply, payload) => {
+		const pathname = request.url.split("?", 1)[0];
+		if ((request.method === "GET" || request.method === "HEAD") && /\.(?:js|css|json|html)$/.test(pathname)) {
+			const vary = String(reply.getHeader("vary") ?? "")
+				.split(",")
+				.map(value => value.trim())
+				.filter(Boolean);
+			if (!vary.some(value => value === "*" || value.toLowerCase() === "accept-encoding")) {
+				reply.header("vary", [...vary, "Accept-Encoding"].join(", "));
+			}
+			if ((reply.statusCode === 200 || reply.statusCode === 304) && /^\/(?:character|card|mode)\/chunks\/[^/]+-[\w-]{8}\.js$/.test(pathname)) {
+				reply.header("cache-control", "public, max-age=31536000, immutable");
+			}
+		}
+		return payload;
+	});
+
 	app.register(fastifyStatic, {
 		root: cfg.dirname,
 		prefix: "/",
 		dotfiles: "allow",
 		maxAge: 0,
+		preCompressed: true,
 	});
 
 	// index.html

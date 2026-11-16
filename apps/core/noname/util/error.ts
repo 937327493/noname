@@ -1,6 +1,6 @@
 import StackFrame from "stackframe";
 import ErrorStackParser from "error-stack-parser";
-import StackTraceGPS from "stacktrace-gps";
+import type StackTraceGPS from "stacktrace-gps";
 import { ErrorManager } from "@/util/sandbox.js";
 
 function getStatusInfo({ lib, get, _status }) {
@@ -82,8 +82,10 @@ function normalizeError(reason: unknown): Error {
  */
 async function fromError(error: Error, opts?: StackTraceGPS.Options): Promise<{ origin: StackFrame; source?: StackFrame }[]> {
 	try {
-		const gps = new StackTraceGPS(opts);
 		const stackframes = ErrorStackParser.parse(error);
+		const { default: GPS } = await import("stacktrace-gps").catch(() => ({ default: null }));
+		if (!GPS) return stackframes.map(origin => ({ origin }));
+		const gps = new GPS(opts);
 		return Promise.all(
 			stackframes.map(async sf => {
 				try {

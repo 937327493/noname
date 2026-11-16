@@ -99,6 +99,29 @@
 			background: linear-gradient(90deg, transparent, #d6ba7c, transparent);
 			animation: startup-loading-progress 1.6s ease-in-out infinite;
 		}
+		.startup-loading--determinate .startup-loading__track::after {
+			width: var(--startup-progress);
+			background: #d6ba7c;
+			animation: none;
+		}
+		.startup-loading--compact {
+			inset: auto 0 max(12px, env(safe-area-inset-bottom));
+			margin-inline: auto;
+			width: min(320px, calc(100% - 24px));
+			padding: 8px 16px;
+			border-radius: 8px;
+			background: #171713;
+			pointer-events: none;
+		}
+		.startup-loading--compact .startup-loading__track {
+			margin: 4px 0;
+			max-width: 100%;
+		}
+		.startup-loading--compact .startup-loading__emblem,
+		.startup-loading--compact .startup-loading__title,
+		.startup-loading--compact .startup-loading__hint {
+			display: none;
+		}
 		.startup-loading__hint {
 			color: rgba(238, 231, 216, 0.55);
 			font-size: 12px;
@@ -147,10 +170,18 @@
 				show(message) {
 					const overlay = getOverlay();
 					if (!overlay) return;
-					overlay.classList.remove("startup-loading--hidden", "startup-loading--error");
+					overlay.classList.remove("startup-loading--hidden", "startup-loading--error", "startup-loading--compact", "startup-loading--determinate");
 					overlay.removeAttribute("aria-hidden");
 					overlay.setAttribute("aria-busy", "true");
 					if (message) setMessage(overlay, message);
+				},
+				progress(completed, total, compact, waitingForMode) {
+					const overlay = getOverlay();
+					if (!overlay) return;
+					this.show(waitingForMode ? `基础资源 ${completed}/${total} · 选择模式后继续` : `正在加载基础资源… ${completed}/${total}`);
+					overlay.classList.add("startup-loading--determinate");
+					overlay.classList.toggle("startup-loading--compact", compact);
+					overlay.style.setProperty("--startup-progress", `${(completed / total) * 100}%`);
 				},
 				hide() {
 					const overlay = getOverlay();
@@ -162,7 +193,7 @@
 				fail() {
 					const overlay = getOverlay();
 					if (!overlay) return;
-					overlay.classList.remove("startup-loading--hidden");
+					overlay.classList.remove("startup-loading--hidden", "startup-loading--compact", "startup-loading--determinate");
 					overlay.classList.add("startup-loading--error");
 					overlay.removeAttribute("aria-hidden");
 					overlay.setAttribute("aria-busy", "false");

@@ -32,6 +32,7 @@ declare interface Window {
     /** 启动资源加载提示 */
     startupLoading: {
         show(message?: string): void;
+        progress(completed: number, total: number, compact: boolean, waitingForMode?: boolean): void;
         hide(): void;
         fail(): void;
     };

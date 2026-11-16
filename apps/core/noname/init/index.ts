@@ -25,7 +25,11 @@ export async function boot() {
 	await import("./polyfill.js");
 	// 设定游戏加载时间，超过时间未加载就提醒
 	const configLoadTime = parseInt(localStorage.getItem(lib.configprefix + "loadtime") || "60000");
-	window.resetGameTimeout = setTimeout(lib.init.reset, configLoadTime);
+	const resetStartupTimeout = () => {
+		clearTimeout(window.resetGameTimeout);
+		window.resetGameTimeout = setTimeout(lib.init.reset, configLoadTime);
+	};
+	resetStartupTimeout();
 
 	setBackground();
 
@@ -112,10 +116,9 @@ export async function boot() {
 	game.layout = layout;
 
 	window.startupLoading.show("正在加载界面样式…");
-	await loadCss();
+	await Promise.all([loadCss(), lib.init.promises.js("game", "package")]);
 	initSheet();
 
-	await lib.init.promises.js("game", "package");
 	const pack = window.noname_package;
 	delete window.noname_package;
 	for (const name in pack.character) {
@@ -304,7 +307,7 @@ export async function boot() {
 		}
 	});
 
-	window.startupLoading.show("正在加载扩展与游戏资源…");
+	window.startupLoading.show("正在加载扩展…");
 	const extensionlist = await getExtensionList();
 	if (extensionlist.length) {
 		_status.extensionLoading = [];
@@ -327,39 +330,37 @@ export async function boot() {
 		);
 	}
 
-	const toLoad: Promise<any>[] = [];
-
-	let show_splash = true;
-	switch (config.get("show_splash")) {
-		case "off":
-			show_splash = false;
-			break;
-		case "init":
-			show_splash = !localStorage.getItem("show_splash_off");
-			break;
-		case "always":
-			show_splash = true;
-			break;
-	}
+	const splashSetting = config.get("show_splash") ?? "always";
+	const showSplash = splashSetting === "always" || (splashSetting === "init" && !localStorage.getItem("show_splash_off"));
 	localStorage.removeItem("show_splash_off");
 
-	if (localStorage.getItem(`${lib.configprefix}playback`)) {
-		toLoad.push(importMode(config.get("mode")));
-	} else if ((localStorage.getItem(`${lib.configprefix}directstart`) || !show_splash) && config.get("all").mode.includes(config.get("mode"))) {
-		toLoad.push(importMode(config.get("mode")));
+	const mode = config.get("mode");
+	const directStart = localStorage.getItem(lib.configprefix + "directstart");
+	localStorage.removeItem(lib.configprefix + "directstart");
+	const playback = localStorage.getItem(lib.configprefix + "playback");
+	const loadInitialMode = playback || ((directStart || !showSplash) && config.get("all").mode.includes(mode));
+	let modeReady: Promise<void> | undefined;
+	let modeSelected: Promise<string> | undefined;
+	let interfacePainted: Promise<void> | undefined;
+	if (loadInitialMode) {
+		modeReady = importMode(mode).catch(error => console.error(`模式《${mode}》加载失败`, error));
+	} else if (!lib.imported.mode?.[mode] && !extensionlist.length) {
+		// 扩展可能在 onload 注册自定义开始界面，有扩展时保留原有初始化顺序。
+		const splash = await mountModeSplash();
+		modeSelected = splash.choice;
+		modeReady = splash.select(resetStartupTimeout);
+		// 先让模式选择界面绘制，再发起武将包和卡牌包请求。
+		interfacePainted = new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 	}
 
-	for (const cardPack of config.get("all").cards) {
-		toLoad.push(importCardPack(cardPack));
+	const packLoading = new AbortController();
+	try {
+		await Promise.all([(interfacePainted ?? Promise.resolve()).then(() => loadBasePacks(resetStartupTimeout, packLoading.signal, modeSelected)), modeReady]);
+	} catch (error) {
+		packLoading.abort();
+		clearTimeout(window.resetGameTimeout);
+		throw error;
 	}
-	for (const characterPack of config.get("all").characters) {
-		toLoad.push(importCharacterPack(characterPack));
-	}
-	toLoad.push(lib.init.promises.js(`${lib.assetURL}character`, "rank"));
-	toLoad.push(lib.init.promises.js(`${lib.assetURL}character`, "replace"));
-	toLoad.push(lib.init.promises.js(`${lib.assetURL}character`, "perfectPairs"));
-
-	await Promise.allSettled(toLoad);
 
 	if (_status.importing) {
 		let promises = [];
@@ -472,36 +473,9 @@ export async function boot() {
 		lib.configMenu.appearence.config.splash_style.item[splash.id] = splash.name;
 	});
 
-	localStorage.removeItem(lib.configprefix + "directstart");
 	if (!lib.imported.mode?.[lib.config.mode]) {
-		window.inSplash = true;
-		clearTimeout(window.resetGameTimeout);
-
-		if (typeof lib.config.splash_style == "undefined") {
-			game.saveConfig("splash_style", lib.onloadSplashes[0].id);
-		}
-		let splash = lib.onloadSplashes.find(item => item.id === lib.config.splash_style);
-		if (!splash) {
-			splash = lib.onloadSplashes[0];
-		}
-
-		let node = ui.create.div("#splash", document.body);
-
-		let { promise, resolve } = Promise.withResolvers();
-		window.startupLoading.hide();
-		await splash.init(node, resolve);
-
-		let result = await promise;
-
-		let splashInRemoing = await splash.dispose(node);
-		if (!splashInRemoing) {
-			node.remove();
-		}
-		window.resetGameTimeout = setTimeout(lib.init.reset, configLoadTime);
-		delete window.inSplash;
-		window.startupLoading.show("正在加载所选模式…");
-		game.saveConfig("mode", result);
-		await importMode(result);
+		const splash = await mountModeSplash();
+		await splash.select(resetStartupTimeout);
 	}
 	lib.storage = (await config.load(lib.config.mode, "data")) || {};
 
@@ -613,6 +587,73 @@ export async function boot() {
 
 	game.loop();
 	requestAnimationFrame(() => requestAnimationFrame(window.startupLoading.hide));
+}
+
+async function mountModeSplash() {
+	window.inSplash = true;
+	clearTimeout(window.resetGameTimeout);
+	if (typeof lib.config.splash_style === "undefined") {
+		game.saveConfig("splash_style", lib.onloadSplashes[0].id);
+	}
+	const splash = lib.onloadSplashes.find(item => item.id === lib.config.splash_style) ?? lib.onloadSplashes[0];
+	const node = ui.create.div("#splash", document.body);
+	const { promise, resolve } = Promise.withResolvers<string>();
+	await splash.init(node, resolve);
+	window.startupLoading.hide();
+	return {
+		choice: promise,
+		async select(resetStartupTimeout: () => void) {
+			const mode = await promise;
+			delete window.inSplash;
+			resetStartupTimeout();
+			window.startupLoading.show("正在加载所选模式…");
+			game.saveConfig("mode", mode);
+			await Promise.all([
+				importMode(mode),
+				splash.dispose(node).then(removing => {
+					if (!removing) node.remove();
+				}),
+			]);
+		},
+	};
+}
+
+async function loadBasePacks(resetStartupTimeout: () => void, signal: AbortSignal, modeSelected?: Promise<string>) {
+	const { cards, characters } = config.get("all");
+	const warmCards = ["standard", "extra"];
+	const warmCharacters = ["standard", "refresh"];
+	const warmup = [...cards.filter(name => warmCards.includes(name)).map(name => () => importCardPack(name)), ...characters.filter(name => warmCharacters.includes(name)).map(name => () => importCharacterPack(name))];
+	const deferred = [...cards.filter(name => !warmCards.includes(name)).map(name => () => importCardPack(name)), ...characters.filter(name => !warmCharacters.includes(name)).map(name => () => importCharacterPack(name)), ...["rank", "replace", "perfectPairs"].map(name => () => lib.init.promises.js(`${lib.assetURL}character`, name))];
+	const tasks: (() => Promise<unknown>)[] = [...warmup, ...deferred];
+	let next = 0;
+	let completed = 0;
+	const report = () => {
+		if (signal.aborted) return;
+		if (!window.inSplash) resetStartupTimeout();
+		if (completed === tasks.length && window.inSplash) {
+			window.startupLoading.hide();
+		} else {
+			window.startupLoading.progress(completed, tasks.length, Boolean(window.inSplash), Boolean(modeSelected && window.inSplash && completed === warmup.length));
+		}
+	};
+	report();
+	// 给模式脚本、样式和其它界面请求留出连接。
+	await Promise.all(
+		Array.from({ length: 4 }, async () => {
+			while (!signal.aborted && next < tasks.length) {
+				const index = next++;
+				if (modeSelected && index >= warmup.length) await modeSelected;
+				if (signal.aborted) return;
+				try {
+					await tasks[index]();
+				} catch (error) {
+					console.error("基础资源加载失败", error);
+				}
+				completed++;
+				report();
+			}
+		})
+	);
 }
 
 async function readExtensionInfoName(infoFile: URL): Promise<string> {

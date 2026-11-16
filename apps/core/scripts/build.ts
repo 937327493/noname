@@ -2,6 +2,9 @@ import { build } from "vite";
 import { execFileSync } from "node:child_process";
 import { join } from "path";
 import { existsSync, readdirSync, writeFileSync } from "fs";
+import { readFile, readdir, writeFile } from "node:fs/promises";
+import { promisify } from "node:util";
+import { gzip } from "node:zlib";
 import { Target, viteStaticCopy } from "vite-plugin-static-copy";
 import generateImportMap from "./vite-plugin-importmap";
 import jit from "@noname/jit";
@@ -94,6 +97,23 @@ async function main() {
 	}
 
 	writeBuildInfo();
+	await compressAssets(join(root, "dist"));
+}
+
+const gzipAsync = promisify(gzip);
+
+async function compressAssets(directory: string) {
+	for (const entry of await readdir(directory, { withFileTypes: true })) {
+		const path = join(directory, entry.name);
+		if (entry.isDirectory()) {
+			if (entry.name !== "src") await compressAssets(path);
+		} else if (entry.isFile() && /\.(?:js|css|json|html)$/.test(entry.name)) {
+			const source = await readFile(path);
+			if (source.length < 1024) continue;
+			const compressed = await gzipAsync(source);
+			if (compressed.length < source.length) await writeFile(`${path}.gz`, compressed);
+		}
+	}
 }
 
 /**
@@ -163,10 +183,25 @@ async function buildIndividual(type: string, target: string | string[], input: R
 					preserveModules: false,
 					preserveModulesRoot: "./",
 
-					// 去掉 hash
+					// 入口地址按包名拼接，拆分出的模块使用带版本的文件名。
 					entryFileNames: "[name].js", // 入口文件
-					chunkFileNames: "[name].js", // 代码分块
+					chunkFileNames: "chunks/[name]-[hash].js",
 					assetFileNames: "[name][extname]", // 静态资源
+					onlyExplicitManualChunks: true,
+					manualChunks(id, { getModuleInfo }) {
+						if (type !== "character") return;
+						const modulePath = id.replaceAll("\\", "/");
+						// 限定包的技能依赖缓存模块。单独分块，避免技能与武将入口循环引用。
+						if (modulePath.endsWith("/noname/library/cache/cacheContext.js") || modulePath.includes("/node_modules/crypto-js/")) {
+							return "cache-context";
+						}
+						const skillModule = modulePath.match(/\/character\/([^/]+)\/skills?(?:\/([\w/-]+))?\.[jt]s$/);
+						if (!skillModule) return;
+						const [, pack, group] = skillModule;
+						const minSize = (group ? 64 : 300) * 1024;
+						if ((getModuleInfo(id)?.code?.length ?? 0) < minSize) return;
+						return group ? `${pack}-skills-${group.replaceAll("/", "-")}` : `${pack}-skills`;
+					},
 				},
 				onwarn(warning, warn) {
 					if (warning.code === "CYCLIC_CROSS_CHUNK_REEXPORT") return;
