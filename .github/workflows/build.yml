@@ -48,6 +48,18 @@ jobs:
           cp -r dist/* /tmp/dist/
 
           git fetch origin
+          (cd /tmp/dist && find character card mode -type f -path '*/chunks/*' | sort > asset-chunks.txt)
+          if git show-ref --verify --quiet refs/remotes/origin/build-output; then
+            previous=refs/remotes/origin/build-output
+            while IFS= read -r asset; do
+              [[ "$asset" =~ ^(character|card|mode)/chunks/[A-Za-z0-9_.-]+\.js(\.gz)?$ ]] || continue
+              target="/tmp/dist/$asset"
+              if [[ ! -e "$target" ]]; then
+                mkdir -p "$(dirname "$target")"
+                git show "$previous:$asset" > "$target"
+              fi
+            done < <(git show "$previous:asset-chunks.txt" 2>/dev/null || git ls-tree -r --name-only "$previous" -- character/chunks card/chunks mode/chunks)
+          fi
           git checkout --orphan build-output
           git reset --hard
           rm -rf *

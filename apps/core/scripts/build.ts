@@ -1,8 +1,8 @@
-import { build } from "vite";
+import { build, type Plugin } from "vite";
 import { execFileSync } from "node:child_process";
 import { join } from "path";
 import { existsSync, readdirSync, writeFileSync } from "fs";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { lstat, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { gzip } from "node:zlib";
 import { Target, viteStaticCopy } from "vite-plugin-static-copy";
@@ -73,6 +73,12 @@ async function main() {
 	}
 
 	// 编译无名杀本体
+	const outputDir = join(await realpath(root), "dist");
+	const previousOutput = await lstat(outputDir).catch((error: NodeJS.ErrnoException) => {
+		if (error.code !== "ENOENT") throw error;
+	});
+	if (previousOutput?.isSymbolicLink()) throw new Error(`构建目录不能是符号链接：${outputDir}`);
+	await rm(outputDir, { recursive: true, force: true });
 	await buildSelf(target, importMap, staticModules);
 
 	// 编译脱离本体单独输出的包体
@@ -97,7 +103,7 @@ async function main() {
 	}
 
 	writeBuildInfo();
-	await compressAssets(join(root, "dist"));
+	await compressAssets(outputDir);
 }
 
 const gzipAsync = promisify(gzip);
@@ -131,6 +137,7 @@ async function buildSelf(target: string | string[], importMap: Record<string, st
 			target,
 			sourcemap: false,
 			minify: false,
+			emptyOutDir: true,
 			rollupOptions: {
 				preserveEntrySignatures: "strict",
 				treeshake: false,
@@ -187,7 +194,6 @@ async function buildIndividual(type: string, target: string | string[], input: R
 					entryFileNames: "[name].js", // 入口文件
 					chunkFileNames: "chunks/[name]-[hash].js",
 					assetFileNames: "[name][extname]", // 静态资源
-					onlyExplicitManualChunks: true,
 					manualChunks(id, { getModuleInfo }) {
 						if (type !== "character") return;
 						const modulePath = id.replaceAll("\\", "/");
@@ -199,18 +205,40 @@ async function buildIndividual(type: string, target: string | string[], input: R
 						if (!skillModule) return;
 						const [, pack, group] = skillModule;
 						const minSize = (group ? 64 : 300) * 1024;
-						if ((getModuleInfo(id)?.code?.length ?? 0) < minSize) return;
+						if (Buffer.byteLength(getModuleInfo(id)?.code ?? "", "utf8") < minSize) return;
 						return group ? `${pack}-skills-${group.replaceAll("/", "-")}` : `${pack}-skills`;
 					},
 				},
-				onwarn(warning, warn) {
-					if (warning.code === "CYCLIC_CROSS_CHUNK_REEXPORT") return;
-					warn(warning);
-				},
 			},
 		},
-		plugins: [viteStaticCopy({ targets: copies })],
+		plugins: [viteStaticCopy({ targets: copies }), verifyChunks()],
 	});
+}
+
+function verifyChunks(): Plugin {
+	return {
+		name: "verify-pack-chunks",
+		generateBundle(_options, bundle) {
+			const checked = new Set<string>();
+			const visiting = new Set<string>();
+			const visit = (file: string) => {
+				if (checked.has(file)) return;
+				if (visiting.has(file)) this.error(`包体分块循环引用：${[...visiting, file].join(" → ")}`);
+				const chunk = bundle[file];
+				if (!chunk || chunk.type !== "chunk") return;
+				visiting.add(file);
+				for (const dependency of [...chunk.imports, ...chunk.dynamicImports]) {
+					if (dependency.startsWith("chunks/") && !bundle[dependency]) {
+						this.error(`${file} 引用的分块不存在：${dependency}`);
+					}
+				}
+				chunk.imports.forEach(visit);
+				visiting.delete(file);
+				checked.add(file);
+			};
+			Object.keys(bundle).forEach(visit);
+		},
+	};
 }
 
 /**
@@ -267,7 +295,7 @@ function writeBuildInfo() {
 	const buildInfo: BuildInfo = {
 		channel,
 		commit,
-		builtAt: process.env.NONAME_BUILD_TIME || "unknown",
+		builtAt: process.env.NONAME_BUILD_TIME || new Date().toISOString(),
 	};
 	writeFileSync(join(root, "dist/game/build-info.json"), `${JSON.stringify(buildInfo, null, "\t")}\n`, "utf8");
 }
@@ -285,6 +313,4 @@ interface IndividualContent {
 	source: string;
 }
 
-if (import.meta.main) {
-	await main();
-}
+await main();

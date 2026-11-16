@@ -73,9 +73,30 @@ export default function createApp(config: Partial<typeof defaultConfig> = {}) {
 		methods: ["GET", "POST", "OPTIONS"],
 	});
 
+	const compressibleAsset = /\.(?:js|css|json|html)$/;
+	app.addHook("onRequest", async request => {
+		if ((request.method !== "GET" && request.method !== "HEAD") || !request.headers["accept-encoding"]) return;
+		let pathname: string;
+		try {
+			pathname = decodeURIComponent(request.url.split("?", 1)[0]);
+		} catch {
+			return;
+		}
+		if (!compressibleAsset.test(pathname)) return;
+		const filename = path.resolve(cfg.dirname, `.${pathname}`);
+		const relative = path.relative(cfg.dirname, filename);
+		if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return;
+		const compressed = await fs.stat(`${filename}.gz`).catch(() => undefined);
+		if (!compressed) return;
+		const source = await fs.stat(filename).catch(() => undefined);
+		if (!source?.isFile() || compressed.mtimeMs < source.mtimeMs) {
+			request.headers["accept-encoding"] = "identity";
+		}
+	});
+
 	app.addHook("onSend", async (request, reply, payload) => {
 		const pathname = request.url.split("?", 1)[0];
-		if ((request.method === "GET" || request.method === "HEAD") && /\.(?:js|css|json|html)$/.test(pathname)) {
+		if ((request.method === "GET" || request.method === "HEAD") && compressibleAsset.test(pathname)) {
 			const vary = String(reply.getHeader("vary") ?? "")
 				.split(",")
 				.map(value => value.trim())
@@ -83,8 +104,9 @@ export default function createApp(config: Partial<typeof defaultConfig> = {}) {
 			if (!vary.some(value => value === "*" || value.toLowerCase() === "accept-encoding")) {
 				reply.header("vary", [...vary, "Accept-Encoding"].join(", "));
 			}
-			if ((reply.statusCode === 200 || reply.statusCode === 304) && /^\/(?:character|card|mode)\/chunks\/[^/]+-[\w-]{8}\.js$/.test(pathname)) {
-				reply.header("cache-control", "public, max-age=31536000, immutable");
+			if (reply.statusCode === 200 || reply.statusCode === 304) {
+				const hashedChunk = /\/(?:character|card|mode)\/chunks\/[^/]+-[\w-]{8,}\.js$/.test(pathname);
+				reply.header("cache-control", hashedChunk ? "public, max-age=31536000, immutable" : "no-cache, must-revalidate");
 			}
 		}
 		return payload;

@@ -82,6 +82,19 @@ function patchAndroidAssets() {
 	renameSync(pnpmDir, androidSafePnpmDir);
 }
 
+function stripPrecompressedAssets(directory: string) {
+	if (!existsSync(directory)) return;
+	for (const entry of readdirSync(directory, { withFileTypes: true })) {
+		const path = resolve(directory, entry.name);
+		if (entry.isDirectory()) stripPrecompressedAssets(path);
+		if (entry.isFile() && /\.(?:js|css|json|html)\.gz$/.test(entry.name)) rmSync(path, { force: true });
+	}
+}
+
 await buildPreload();
 capSync();
-if (platform !== "ios") patchAndroidAssets();
+if (platform !== "ios") {
+	patchAndroidAssets();
+	stripPrecompressedAssets(resolve(androidAssetsNodeModules, ".."));
+}
+if (platform !== "android") stripPrecompressedAssets(resolve(root, "native/ios/App/App/public"));

@@ -12,8 +12,8 @@ async function main(targets: PackagerOptions["targets"], config: Partial<Configu
 			},
 			files: [
 				{ from: "dist", to: "" },
-				{ from: "../../dist", to: "" },
-				{ from: "../../dist/node_modules", to: "node_modules" },
+				{ from: "../../dist", to: "", filter: ["**/*", "!**/*.{js,css,json,html}.gz"] },
+				{ from: "../../dist/node_modules", to: "node_modules", filter: ["**/*", "!**/*.{js,css,json,html}.gz"] },
 				"package.json",
 			],
 			extraMetadata: {

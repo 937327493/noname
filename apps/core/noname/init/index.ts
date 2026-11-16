@@ -490,7 +490,8 @@ export async function boot() {
 	lib.connectCardPack = [];
 
 	window.startupLoading.show("正在初始化游戏内容…");
-	const currentMode = lib.imported.mode[lib.config.mode];
+	const currentMode = lib.imported.mode?.[lib.config.mode];
+	if (!currentMode) throw new Error(`模式《${lib.config.mode}》未注册，请检查对应的模式脚本。`);
 	loadMode(currentMode);
 	// 为了模式扩展，两个东西删不了
 	lib.init.start = currentMode.start;
@@ -598,8 +599,8 @@ async function mountModeSplash() {
 	const splash = lib.onloadSplashes.find(item => item.id === lib.config.splash_style) ?? lib.onloadSplashes[0];
 	const node = ui.create.div("#splash", document.body);
 	const { promise, resolve } = Promise.withResolvers<string>();
-	await splash.init(node, resolve);
 	window.startupLoading.hide();
+	await splash.init(node, resolve);
 	return {
 		choice: promise,
 		async select(resetStartupTimeout: () => void) {
@@ -610,9 +611,9 @@ async function mountModeSplash() {
 			game.saveConfig("mode", mode);
 			await Promise.all([
 				importMode(mode),
-				splash.dispose(node).then(removing => {
-					if (!removing) node.remove();
-				}),
+				(async () => {
+					if (!(await splash.dispose(node))) node.remove();
+				})(),
 			]);
 		},
 	};
@@ -624,36 +625,42 @@ async function loadBasePacks(resetStartupTimeout: () => void, signal: AbortSigna
 	const warmCharacters = ["standard", "refresh"];
 	const warmup = [...cards.filter(name => warmCards.includes(name)).map(name => () => importCardPack(name)), ...characters.filter(name => warmCharacters.includes(name)).map(name => () => importCharacterPack(name))];
 	const deferred = [...cards.filter(name => !warmCards.includes(name)).map(name => () => importCardPack(name)), ...characters.filter(name => !warmCharacters.includes(name)).map(name => () => importCharacterPack(name)), ...["rank", "replace", "perfectPairs"].map(name => () => lib.init.promises.js(`${lib.assetURL}character`, name))];
-	const tasks: (() => Promise<unknown>)[] = [...warmup, ...deferred];
-	let next = 0;
+	const total = warmup.length + deferred.length;
 	let completed = 0;
 	const report = () => {
 		if (signal.aborted) return;
 		if (!window.inSplash) resetStartupTimeout();
-		if (completed === tasks.length && window.inSplash) {
+		if (completed === total && window.inSplash) {
 			window.startupLoading.hide();
 		} else {
-			window.startupLoading.progress(completed, tasks.length, Boolean(window.inSplash), Boolean(modeSelected && window.inSplash && completed === warmup.length));
+			window.startupLoading.progress(completed, total, Boolean(window.inSplash), Boolean(modeSelected && window.inSplash && completed === warmup.length));
 		}
 	};
 	report();
-	// 给模式脚本、样式和其它界面请求留出连接。
-	await Promise.all(
-		Array.from({ length: 4 }, async () => {
-			while (!signal.aborted && next < tasks.length) {
-				const index = next++;
-				if (modeSelected && index >= warmup.length) await modeSelected;
-				if (signal.aborted) return;
-				try {
-					await tasks[index]();
-				} catch (error) {
-					console.error("基础资源加载失败", error);
+	const loadTasks = async (tasks: (() => Promise<unknown>)[], concurrency: number) => {
+		let next = 0;
+		await Promise.all(
+			Array.from({ length: Math.min(concurrency, tasks.length) }, async () => {
+				while (!signal.aborted && next < tasks.length) {
+					const load = tasks[next++];
+					try {
+						await load();
+					} catch (error) {
+						console.error("基础资源加载失败", error);
+					}
+					completed++;
+					report();
 				}
-				completed++;
-				report();
-			}
-		})
-	);
+			})
+		);
+	};
+	if (modeSelected) {
+		await loadTasks(warmup, 4);
+		await modeSelected;
+		await loadTasks(deferred, 6);
+	} else {
+		await loadTasks([...warmup, ...deferred], 6);
+	}
 }
 
 async function readExtensionInfoName(infoFile: URL): Promise<string> {

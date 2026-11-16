@@ -181,7 +181,8 @@
 					this.show(waitingForMode ? `基础资源 ${completed}/${total} · 选择模式后继续` : `正在加载基础资源… ${completed}/${total}`);
 					overlay.classList.add("startup-loading--determinate");
 					overlay.classList.toggle("startup-loading--compact", compact);
-					overlay.style.setProperty("--startup-progress", `${(completed / total) * 100}%`);
+					const percent = total > 0 ? Math.min(100, Math.max(0, (completed / total) * 100)) : 0;
+					overlay.style.setProperty("--startup-progress", `${percent}%`);
 				},
 				hide() {
 					const overlay = getOverlay();
