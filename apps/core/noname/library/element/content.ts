@@ -12544,6 +12544,7 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 				game.dead.push(player);
 				_status.dying.remove(player);
 			}, player);
+			game.updateMidgameAvailability();
 
 			//是否播放阵亡语音
 			if (!event.noDieAudio) {
@@ -12876,6 +12877,7 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 			player,
 			hp
 		);
+		game.updateMidgameAvailability();
 	},
 	//暂时还是只能一次加一张牌，需要后续跟进处理
 	//一次加一张够用了

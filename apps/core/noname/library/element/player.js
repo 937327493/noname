@@ -3864,12 +3864,18 @@ export class Player extends HTMLDivElement {
 				this.version = config.version;
 				if (config.gameStarted) {
 					str += '<span class="firetext">游戏中</span>　';
-					if (config.observe && config.observeReady && this.version == lib.versionOL) {
+					const canJoin = config.midgame_join && config.midgameReady;
+					if (canJoin) {
+						str += '<span class="greentext">可中途加入</span>　';
+					}
+					this.roomgaming = !canJoin && !(config.observe && config.observeReady);
+					if (!this.roomgaming && this.version == lib.versionOL) {
 						this.classList.remove("exclude");
 					} else {
 						this.classList.add("exclude");
 					}
 				} else {
+					this.roomgaming = false;
 					str += '<span class="greentext">等待中</span>　';
 					if (this.version != lib.versionOL) {
 						this.classList.add("exclude");
@@ -3901,11 +3907,6 @@ export class Player extends HTMLDivElement {
 					this.roomfull = true;
 				} else {
 					this.roomfull = false;
-				}
-				if (config.gameStarted && (!config.observe || !config.observeReady)) {
-					this.roomgaming = true;
-				} else {
-					this.roomgaming = false;
 				}
 			} else {
 				str = "异常房间";

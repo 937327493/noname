@@ -112,6 +112,15 @@ export const startMenuData = {
 					};
 				}
 			}
+			if (!infoconfig.connect_midgame_join) {
+				infoconfig.connect_midgame_join = {
+					name: "允许中途加入",
+					intro: "允许新玩家接管对局中存活的人机角色。",
+					init: false,
+					connect: true,
+					frequent: true,
+				};
+			}
 			for (const key in infoconfig) {
 				if (key === "update") {
 					continue;

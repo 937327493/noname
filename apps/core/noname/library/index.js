@@ -16,6 +16,7 @@ import * as Element from "./element/index.js";
 import { updateURLs } from "./update-urls.js";
 import { defaultHooks } from "./hooks/index.js";
 import { security, ErrorManager } from "@/util/sandbox.js";
+import { showMidgameSeats } from "@/ui/create/connect-midgame.js";
 import { assetURL, userAgentLowerCase, GeneratorFunction, AsyncFunction, characterDefaultPicturePath } from "@/util/index.js";
 
 import { defaultSplashs } from "@/init/onload/index.js";
@@ -10316,6 +10317,10 @@ export class Library {
 					this.send("heartbeat");
 					return;
 				}
+				if (this.midgameMessages) {
+					this.midgameMessages.push(messageevent);
+					return;
+				}
 				var message;
 				try {
 					message = JSON.parse(messageevent.data);
@@ -10353,6 +10358,8 @@ export class Library {
 				}
 			},
 			onclose: function () {
+				ui.midgameSeats?.remove();
+				delete ui.midgameSeats;
 				if (this._nocallback) {
 					return;
 				}
@@ -11959,9 +11966,14 @@ export class Library {
 				var banBlacklist = lib.config.banBlacklist === undefined ? [] : lib.config.banBlacklist;
 				if (lib.node.banned.includes(banned_info) || banBlacklist.includes(config.onlineKey)) {
 					this.send("denied", "banned");
-				} else if (config.id && lib.playerOL && lib.playerOL[config.id]) {
+				} else if (typeof config.id === "string" && lib.playerOL?.[config.id]?.ws) {
 					var player = lib.playerOL[config.id];
 					var previousClient = player.ws;
+					if (previousClient.midgameToken && previousClient.midgameToken !== config.midgameToken) {
+						this.send("denied", "gaming");
+						this.close();
+						return;
+					}
 					if (previousClient && previousClient !== this && !previousClient.closed) {
 						previousClient.closed = true;
 						lib.node.clients.remove(previousClient);
@@ -11971,13 +11983,18 @@ export class Library {
 					player.ws = this;
 					player.isAuto = false;
 					this.id = config.id;
+					this.midgameToken = previousClient.midgameToken;
 					game.broadcast(function (player) {
 						player.setNickname();
 					}, player);
 					var nickname = get.plainText(player.nickname);
 					game.log("玩家 ", `#y${nickname}`, " 重连成功");
 					game.me.chat(`玩家 <span style="font-weight: bold; color: rgb(126, 180, 255)">${nickname}</span> 重连成功`);
-					this.send("reinit", lib.configOL, get.arenaState(), game.getState ? game.getState() : {}, game.ip, null, _status.onreconnect, _status.cardtag, _status.postReconnect);
+					if (this.midgameToken) {
+						this.sendMidgameState();
+					} else {
+						this.send("reinit", lib.configOL, get.arenaState(), game.getState ? game.getState() : {}, game.ip, null, _status.onreconnect, _status.cardtag, _status.postReconnect);
+					}
 				} else if (version != lib.versionOL) {
 					this.send("denied", "version");
 					lib.node.clients.remove(this);
@@ -11989,34 +12006,18 @@ export class Library {
 				} else if (get.config("check_extension", "connect") && config.extension) {
 					this.send("denied", "extension");
 				} else if (!_status.waitingForPlayer) {
-					if (!config.nickname) {
+					const seats = config.midgameJoin === true && !config.id && typeof config.nickname === "string" ? game.getMidgameSeats() : [];
+					if (seats.length) {
+						this.nickname = (get.plainText(config.nickname) || "").replace(/[<>&]/g, "").trim().slice(0, 12) || "无名玩家";
+						this.avatar = typeof config.avatar === "string" ? config.avatar : "caocao";
+						this.midgamePending = true;
+						this.sendMidgameSeats(seats);
+					} else if (!config.nickname) {
 						this.send("denied", "banned");
 						lib.node.clients.remove(this);
 						this.closed = true;
 					} else if (game.phaseNumber && lib.configOL.observe) {
-						lib.node.observing.push(this);
-						this.send("reinit", lib.configOL, get.arenaState(), game.getState ? game.getState() : {}, game.ip, game.players[0].playerid, null, _status.cardtag, _status.postReconnect);
-						// 没有系统提示的接口喵？
-						game.log("玩家 ", `#y${get.plainText(config.nickname)}`, " 进入房间观战");
-						game.me.chat(`玩家 <span style="font-weight: bold; color: rgb(126, 180, 255)">${get.plainText(config.nickname)}</span> 进入房间观战`);
-						if (!ui.removeObserve) {
-							ui.removeObserve = ui.create.system(
-								"移除旁观",
-								function () {
-									lib.configOL.observe = false;
-									if (game.onlineroom) {
-										game.send("server", "config", lib.configOL);
-									}
-									while (lib.node.observing.length) {
-										lib.node.observing.shift().ws.close();
-									}
-									this.remove();
-									delete ui.removeObserve;
-								},
-								true,
-								true
-							);
-						}
+						this.startObserving(config.nickname);
 					} else {
 						this.send("denied", "gaming");
 						lib.node.clients.remove(this);
@@ -12066,7 +12067,39 @@ export class Library {
 			 * @this {import("./element/client.js").Client}
 			 */
 			reinited() {
+				this.midgameLoading = false;
 				this.inited = true;
+			},
+			/** @this {import("./element/client.js").Client} */
+			takeMidgameSeat(id) {
+				if (!this.midgamePending) {
+					return;
+				}
+				if (id === null && lib.configOL.observe && game.players.length) {
+					this.midgamePending = false;
+					this.startObserving(this.nickname);
+					return;
+				}
+				const seats = game.getMidgameSeats();
+				const player = seats.find(seat => seat.playerid === id);
+				if (!player) {
+					this.sendMidgameSeats(seats, true);
+					return;
+				}
+
+				this.midgamePending = false;
+				// 座位 ID 在开局时已公开，重连需另外验证接管时签发的凭证。
+				this.midgameToken = Array.from(crypto.getRandomValues(new Uint32Array(4)), n => n.toString(16).padStart(8, "0")).join("");
+				this.id = player.playerid;
+				player.ws = this;
+				player.nickname = this.nickname;
+				player.avatar = this.avatar;
+				player.isAuto = false;
+				player.setNickname();
+				this.sendMidgameState();
+				game.updateConnectProfile(player, this.nickname, this.avatar);
+				game.updateMidgameAvailability();
+				game.log("玩家 ", `#y${this.nickname}`, " 接管了人机角色");
 			},
 			/**
 			 * @this {import("./element/client.js").Client}
@@ -12414,6 +12447,8 @@ export class Library {
 						avatar: lib.config.connect_avatar,
 						nickname: get.connectNickname(),
 						rematchPlayer: rematch?.host === false ? rematch.player : undefined,
+						midgameJoin: true,
+						midgameToken: game.onlineID && lib.config.reconnect_info?.[1] === game.onlineID ? lib.config.reconnect_info[3] : undefined,
 						versionLocal: lib.version,
 						extension: lib.config.extensions.some(ext => lib.config[`extension_${ext}_enable`]),
 					},
@@ -12875,7 +12910,16 @@ export class Library {
 					}
 				}
 			},
-			reinit: function (config, state, state2, ip, observe, onreconnect, cardtag, postReconnect) {
+			midgameSeats: showMidgameSeats,
+			reinit: function (config, state, state2, ip, observe, onreconnect, cardtag, postReconnect, midgame) {
+				const socket = game.ws;
+				ui.midgameSeats?.remove();
+				delete ui.midgameSeats;
+				if (midgame) {
+					game.onlineID = midgame.id;
+					// 保留加载模式期间收到的更新，在恢复快照后按顺序处理。
+					socket.midgameMessages = [];
+				}
 				_status.reconnecting = false;
 				ui.auto.show();
 				ui.pause.show();
@@ -12893,7 +12937,12 @@ export class Library {
 					game.onlineID = null;
 					game.roomId = null;
 				}
-				if (game.servermode && !observe) {
+				if (midgame) {
+					game.saveConfig("reconnect_info", [_status.ip, game.onlineID, game.roomId, midgame.token]);
+					if (!game.servermode) {
+						game.saveConfig("tmp_user_roomId", game.roomId);
+					}
+				} else if (game.servermode && !observe) {
 					game.saveConfig("reconnect_info", [_status.ip, game.onlineID, game.roomId]);
 				} else {
 					game.saveConfig("reconnect_info", [_status.ip, game.onlineID]);
@@ -12908,6 +12957,9 @@ export class Library {
 				lib.vcardOL = {};
 
 				game.loadModeAsync(config.mode, function (mode) {
+					if (midgame && (game.ws !== socket || socket.readyState !== WebSocket.OPEN)) {
+						return;
+					}
 					for (var i in mode.ai) {
 						if (typeof mode.ai[i] == "object") {
 							if (ai[i] == undefined) {
@@ -13240,6 +13292,10 @@ export class Library {
 					_status.event = lib.element.GameEvent.initialGameEvent();
 					_status.paused = false;
 					_status.dying = get.parsedResult(state.dying) || [];
+					if (midgame) {
+						game.phaseNumber = midgame.phase;
+						_status.currentPhase = lib.playerOL[midgame.currentPlayer];
+					}
 
 					if (game.updateState) {
 						game.updateState(state2);
@@ -13282,6 +13338,13 @@ export class Library {
 					}
 					ui.updatehl();
 					ui.create.connecting(true);
+					if (midgame) {
+						const messages = socket.midgameMessages;
+						delete socket.midgameMessages;
+						for (const message of messages) {
+							socket.onmessage(message);
+						}
+					}
 				});
 			},
 			exec: function (func) {
