@@ -8,7 +8,21 @@ export const type = "mode";
 export default {
 	name: "connect",
 	async start(event, trigger, player) {
-		const directstartmode = lib.config.directstartmode;
+		const rematchKey = lib.configprefix + "connectRematch";
+		const rematch = JSON.parse(sessionStorage.getItem(rematchKey) ?? "null");
+		sessionStorage.removeItem(rematchKey);
+		if (rematch?.expires > Date.now()) {
+			game.connectRematch = rematch;
+		}
+		if (!game.onlineKey) {
+			game.onlineKey = localStorage.getItem(`${lib.configprefix}key`);
+			if (!game.onlineKey) {
+				game.onlineKey = get.id();
+				localStorage.setItem(`${lib.configprefix}key`, game.onlineKey);
+			}
+		}
+		const pendingRematch = game.connectRematch;
+		const directstartmode = pendingRematch ? (pendingRematch.host && !pendingRematch.roomId ? pendingRematch.config.mode : undefined) : lib.config.directstartmode;
 		ui.create.menu(true);
 		event.textnode = ui.create.div("", "输入联机地址");
 		const createNode = () => {
@@ -24,7 +38,7 @@ export default {
 					},
 					true
 				);
-				game.switchMode(directstartmode);
+				game.switchMode(directstartmode, game.connectRematch?.host ? game.connectRematch.config : undefined);
 				return;
 			}
 			if (lib.node && window.require) {
@@ -57,7 +71,10 @@ export default {
 			node.style.overflow = "hidden";
 
 			let connectionStarted = false;
-			const connect = (e, invitationText) => {
+			const connect = (e, invitationText, retryUntil = 0) => {
+				if (connectionStarted && !retryUntil) {
+					return;
+				}
 				connectionStarted = true;
 				event.textnode.textContent = "正在连接...";
 				clearTimeout(event.timeout);
@@ -69,6 +86,9 @@ export default {
 				game.saveConfig("last_ip", ip);
 				game.connect(ip, success => {
 					if (success) {
+						if (retryUntil) {
+							return;
+						}
 						if (invitationText) {
 							_status.read_clipboard_text = invitationText;
 							return;
@@ -82,9 +102,22 @@ export default {
 						}
 						return;
 					}
+					if (Date.now() < retryUntil) {
+						setTimeout(() => {
+							if (game.connectRematch) {
+								connect(null, null, retryUntil);
+							}
+						}, 500);
+						return;
+					}
+					if (retryUntil) {
+						delete game.connectRematch;
+						game.roomId = null;
+					}
+					connectionStarted = false;
 					if (event.textnode) {
 						_status.reconnecting = false;
-						alert(invitationText ? "邀请链接解析失败" : "连接失败");
+						alert(retryUntil ? "无法连接原房间，请重新连接。" : invitationText ? "邀请链接解析失败" : "连接失败");
 						event.textnode.textContent = "输入联机地址";
 					}
 				});
@@ -164,6 +197,16 @@ export default {
 				},
 				220
 			);
+			if (game.connectRematch) {
+				const { host, roomId, ip, expires } = game.connectRematch;
+				if (host && roomId) {
+					game.roomId = roomId;
+				}
+				node.textContent = ip;
+				connect(null, null, expires);
+				lib.init.onfree();
+				return;
+			}
 			// 意外断线(ws.onclose 写入的 reconnect 标记)时用上次地址自动重连,免得每次断线都重新输地址;
 			// 连接成功后 reconnect_info 会自动回到原房间,连接失败则回落到本输入界面
 			if (localStorage.getItem(`${lib.configprefix}reconnect`) && lib.config.last_ip) {
@@ -216,13 +259,6 @@ export default {
 			lib.init.onfree();
 		};
 		createNode();
-		if (!game.onlineKey) {
-			game.onlineKey = localStorage.getItem(`${lib.configprefix}key`);
-			if (!game.onlineKey) {
-				game.onlineKey = get.id();
-				localStorage.setItem(`${lib.configprefix}key`, game.onlineKey);
-			}
-		}
 		_status.connectDenied = createNode;
 		setTimeout(lib.init.onfree, 1000);
 	},

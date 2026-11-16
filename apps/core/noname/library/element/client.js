@@ -71,6 +71,8 @@ export class Client {
 	 * @type {boolean | undefined}
 	 */
 	inited;
+	/** @type {string | undefined} */
+	rematchPlayer;
 	close() {
 		if (this.closed) {
 			return this;

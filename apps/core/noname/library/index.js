@@ -12030,6 +12030,7 @@ export class Library {
 					if (config) {
 						this.avatar = config.avatar;
 						this.nickname = config.nickname;
+						this.rematchPlayer = config.rematchPlayer;
 					}
 					for (var i = 0; i < game.connectPlayers.length; i++) {
 						if (game.connectPlayers[i].classList.contains("unselectable2")) {
@@ -12052,6 +12053,13 @@ export class Library {
 				this.inited = true;
 				if (_status.waitingForPlayer) {
 					game.updateWaiting();
+					const rematch = game.connectRematch;
+					if (rematch?.host && Date.now() < rematch.expires && rematch.players.length) {
+						const ready = new Set(game.connectPlayers.filter(player => player.ws?.inited && !player.ws.closed).map(player => player.ws.rematchPlayer));
+						if (rematch.players.every(player => ready.has(player))) {
+							game.resume();
+						}
+					}
 				}
 			},
 			/**
@@ -12396,6 +12404,7 @@ export class Library {
 				}
 			},
 			opened: function () {
+				const rematch = game.connectRematch;
 				game.send(
 					"init",
 					lib.versionOL,
@@ -12404,6 +12413,7 @@ export class Library {
 						onlineKey: game.onlineKey,
 						avatar: lib.config.connect_avatar,
 						nickname: get.connectNickname(),
+						rematchPlayer: rematch?.host === false ? rematch.player : undefined,
 						versionLocal: lib.version,
 						extension: lib.config.extensions.some(ext => lib.config[`extension_${ext}_enable`]),
 					},
@@ -12425,6 +12435,9 @@ export class Library {
 				}
 			},
 			selfclose: function (reason) {
+				if (_status.reloading && sessionStorage.getItem(lib.configprefix + "connectRematch")) {
+					return;
+				}
 				_status.reconnecting = false;
 				game.saveConfig("reconnect_info");
 				game.saveConfig("tmp_owner_roomId");
@@ -12441,6 +12454,19 @@ export class Library {
 				game.saveConfig("mode", "connect", false, game.reload);
 				alert(reason || "房主已断开，本局已结束，请重新创建或加入房间。");
 			},
+			connectRematch: function (player) {
+				if (!game.online || !_status.over || game.observe || player !== game.onlineID || _status.reloading) {
+					return;
+				}
+				game.saveConnectRematch({
+					host: false,
+					player,
+					ip: _status.ip,
+					roomId: typeof game.roomId === "string" ? game.roomId : undefined,
+					expires: Date.now() + 45000,
+				});
+				game.reload();
+			},
 			reloadroom: function (forced) {
 				// if (window.isNonameServer && (forced || !_status.protectingroom)) {
 				// 	game.reload();
@@ -12451,11 +12477,15 @@ export class Library {
 				game.onlineroom = true;
 				game.roomId = index;
 				lib.node = {};
-				game.switchMode(lib.configOL.mode);
+				const rematch = game.connectRematch;
+				game.switchMode(rematch?.host ? rematch.config.mode : lib.configOL.mode, rematch?.host ? rematch.config : undefined);
 				ui.create.connecting(true);
 			},
 			enterroomfailed: function () {
-				if (_status.reconnecting) {
+				if (game.connectRematch?.host === false) {
+					delete game.connectRematch;
+					alert("无法自动返回原房间，请从大厅重新加入。");
+				} else if (_status.reconnecting) {
 					alert("无法恢复原房间，房主可能已离线，本局已结束。");
 					game.saveConfig("reconnect_info");
 					game.saveConfig("tmp_owner_roomId");
@@ -12540,6 +12570,28 @@ export class Library {
 						}
 						return false;
 					};
+					const rematch = game.connectRematch;
+					if (rematch?.host === false && rematch.roomId) {
+						ui.create.connecting();
+						const enterRematch = () => {
+							if (Date.now() >= rematch.expires || !game.ws || !ui.rooms) {
+								clearInterval(interval);
+								delete game.connectRematch;
+								ui.create.connecting(true);
+								if (ui.rooms && game.ws) {
+									alert("等待原房间超时，请从大厅重新加入。");
+								}
+								return;
+							}
+							const room = findRoom(rematch.roomId);
+							if (room && !room.roomempty && !room.config?.gameStarted) {
+								clearInterval(interval);
+								game.send("server", "enter", rematch.roomId, get.connectNickname(), lib.config.connect_avatar);
+							}
+						};
+						const interval = setInterval(enterRematch, 500);
+						enterRematch();
+					}
 					if (typeof lib.config.tmp_owner_roomId == "string") {
 						if (typeof game.roomId != "string" && !findRoom(lib.config.tmp_owner_roomId)) {
 							lib.configOL.mode = lib.config.connect_mode;
@@ -12715,6 +12767,7 @@ export class Library {
 			},
 			init: function (id, config, ip, servermode, roomId) {
 				_status.reconnecting = false;
+				delete game.connectRematch;
 				game.online = true;
 				game.onlineID = id;
 				game.ip = ip;

@@ -4502,6 +4502,7 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 
 		await game.pause();
 
+		delete game.connectRematch;
 		_status.waitingForPlayer = false;
 		lib.configOL.gameStarted = true;
 		if (game.onlineroom) {
@@ -4511,6 +4512,10 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 			player.delete();
 		}
 		delete game.connectPlayers;
+		for (const key of ["connectStartButton", "connectStartBar", "connectShareButton"] as const) {
+			ui[key]?.delete();
+			delete ui[key];
+		}
 		if (ui.roomInfo) {
 			ui.roomInfo.remove();
 			delete ui.roomInfo;

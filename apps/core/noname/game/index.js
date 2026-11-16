@@ -27,6 +27,8 @@ export class Game {
 	online = false;
 	onlineID = null;
 	onlineKey = null;
+	/** @type {({ host: true, config: typeof lib.configOL, players: string[] } | { host: false, player: string }) & { ip: string, roomId?: string, expires: number } | undefined} */
+	connectRematch;
 	/**
 	 * @type {Player[]}
 	 */
@@ -4979,6 +4981,44 @@ ${e instanceof Error ? e.stack : String(e)}`);
 		game.reload();
 	}
 	/**
+	 * @param {NonNullable<Game["connectRematch"]>} rematch
+	 */
+	saveConnectRematch(rematch) {
+		sessionStorage.setItem(lib.configprefix + "connectRematch", JSON.stringify(rematch));
+		localStorage.removeItem(lib.configprefix + "reconnect");
+		game.saveConfig("mode", "connect");
+		game.saveConfig("reconnect_info");
+		game.saveConfig("tmp_owner_roomId");
+		game.saveConfig("tmp_user_roomId");
+		localStorage.setItem(lib.configprefix + "directstart", "true");
+	}
+	startConnectRematch() {
+		if (!_status.over || !lib.node?.clients || _status.reloading) {
+			return;
+		}
+		const playerClients = new Set([...game.players, ...game.dead, ...(game.additionaldead || [])].map(player => player.ws));
+		const clients = lib.node.clients.filter(client => client.inited && !client.closed && playerClients.has(client));
+		const config = { ...lib.configOL };
+		delete config.gameStarted;
+		delete config.observeReady;
+		const roomId = game.onlineroom && typeof game.roomId === "string" ? game.roomId : undefined;
+		game.saveConnectRematch({
+			host: true,
+			config,
+			players: clients.map(client => client.id),
+			ip: _status.ip || game.ip,
+			roomId,
+			expires: Date.now() + 45000,
+		});
+		if (!game.onlineroom) {
+			game.saveConfig("directstartmode", config.mode);
+		}
+		for (const client of clients) {
+			client.send("connectRematch", client.id);
+		}
+		game.reload();
+	}
+	/**
 	 * @param { Function } func
 	 */
 	update(func) {
@@ -7193,6 +7233,10 @@ ${e instanceof Error ? e.stack : String(e)}`);
 			game.controlOver();
 			return;
 		}
+		const canRematch = _status.connectMode && !!lib.node?.clients && !!lib.configOL.mode && !_status.video;
+		if (canRematch) {
+			ui.create.control("再来一局", game.startConnectRematch);
+		}
 		if (!_status.brawl) {
 			if (lib.config.mode == "boss") {
 				ui.create.control("再战", function () {
@@ -7264,7 +7308,7 @@ ${e instanceof Error ? e.stack : String(e)}`);
 		if (game.addRecord) {
 			game.addRecord(resultbool);
 		}
-		if (_status.connectMode && !game.online) {
+		if (_status.connectMode && !game.online && !canRematch) {
 			setTimeout(game.reload, 15000);
 		}
 	}
