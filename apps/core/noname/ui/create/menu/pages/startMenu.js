@@ -194,6 +194,13 @@ export const startMenu = function (connectMenu) {
 						init: false,
 						connect: true,
 					};
+					infoconfig.connect_midgame_join = {
+						name: "允许中途加入",
+						intro: "允许新玩家接管对局中存活的人机角色。",
+						init: false,
+						connect: true,
+						frequent: true,
+					};
 					infoconfig.connect_mount_combine = {
 						name: "合并坐骑栏",
 						init: false,
@@ -238,7 +245,7 @@ export const startMenu = function (connectMenu) {
 					var cfgnode = createConfig(cfg);
 					map[j] = cfgnode;
 					if (cfg.frequent) {
-						page.appendChild(cfgnode);
+						page.insertBefore(cfgnode, j === "connect_midgame_join" ? page.firstChild : null);
 					} else {
 						cfgnode.classList.add("auto-hide");
 						hiddenNodes.push(cfgnode);

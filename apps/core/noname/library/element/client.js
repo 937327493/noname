@@ -73,6 +73,58 @@ export class Client {
 	inited;
 	/** @type {string | undefined} */
 	rematchPlayer;
+	midgamePending = false;
+	midgameLoading = false;
+	/** @type {string | undefined} */
+	midgameToken;
+	sendMidgameSeats(players, changed = false) {
+		const seats = players
+			.map(player => {
+				const characters = [player.name1, player.name2].filter((name, index) => name && !player.isUnseen(index));
+				return {
+					id: player.playerid,
+					seat: Number(player.dataset.position) + 1,
+					name: characters.length ? characters.map(name => get.plainText(get.translation(name))).join(" / ") : "未亮将",
+					portrait: characters[0],
+				};
+			})
+			.sort((a, b) => a.seat - b.seat);
+		this.send("midgameSeats", seats, changed, Boolean(lib.configOL.observe));
+	}
+	sendMidgameState() {
+		this.midgameLoading = true;
+		this.send("reinit", lib.configOL, get.arenaState(), game.getState ? game.getState() : {}, game.ip, null, _status.onreconnect, _status.cardtag, _status.postReconnect, {
+			id: this.id,
+			token: this.midgameToken,
+			phase: game.phaseNumber,
+			currentPlayer: _status.currentPhase?.playerid,
+		});
+	}
+	startObserving(nickname) {
+		lib.node.observing.push(this);
+		this.send("reinit", lib.configOL, get.arenaState(), game.getState ? game.getState() : {}, game.ip, game.players[0].playerid, null, _status.cardtag, _status.postReconnect);
+		const name = get.plainText(nickname);
+		game.log("玩家 ", `#y${name}`, " 进入房间观战");
+		game.me.chat(`玩家 <span style="font-weight: bold; color: rgb(126, 180, 255)">${name}</span> 进入房间观战`);
+		if (!ui.removeObserve) {
+			ui.removeObserve = ui.create.system(
+				"移除旁观",
+				function () {
+					lib.configOL.observe = false;
+					if (game.onlineroom) {
+						game.send("server", "config", lib.configOL);
+					}
+					while (lib.node.observing.length) {
+						lib.node.observing.shift().ws.close();
+					}
+					this.remove();
+					delete ui.removeObserve;
+				},
+				true,
+				true
+			);
+		}
+	}
 	close() {
 		if (this.closed) {
 			return this;

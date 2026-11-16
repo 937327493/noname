@@ -185,7 +185,8 @@ export function createServer(options: ServerOptions = {}): ServerInstance {
 			if (!room.owner) return util.sendl(client, "enterroomfailed");
 
 			const reconnecting = typeof reconnectId === "string" && reconnectId.length > 0;
-			if (!room.config || (room.config.gameStarted && !reconnecting && (!room.config.observe || !room.config.observeReady))) {
+			const config = room.config;
+			if (!config || (config.gameStarted && !reconnecting && !(config.observe && config.observeReady) && !(config.midgame_join && config.midgameReady))) {
 				return util.sendl(client, "enterroomfailed");
 			}
 

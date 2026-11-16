@@ -1921,7 +1921,7 @@ export class Game {
 			return;
 		}
 		for (const client of lib.node.clients) {
-			if (client.inited) {
+			if (client.inited || client.midgameLoading) {
 				client.send(func, ...args);
 			}
 		}
@@ -1950,6 +1950,7 @@ export class Game {
 		}
 	}
 	syncState() {
+		game.updateMidgameAvailability();
 		let state = null;
 		if (game.getState) {
 			state = game.getState();
@@ -1966,6 +1967,22 @@ export class Game {
 			_status.currentPhase,
 			game.phaseNumber
 		);
+	}
+	getMidgameSeats() {
+		if (!lib.configOL?.midgame_join || !lib.configOL.gameStarted || !this.phaseNumber || _status.over) {
+			return [];
+		}
+		return this.players.filter(player => player !== this.me && !player.ws && !player.nickname && lib.playerOL?.[player.playerid] === player && player.isIn() && player.hp > 0);
+	}
+	updateMidgameAvailability() {
+		if (!this.onlineroom || !lib.configOL?.midgame_join || !lib.configOL.gameStarted) {
+			return;
+		}
+		const ready = this.getMidgameSeats().length > 0;
+		if (Boolean(lib.configOL.midgameReady) !== ready) {
+			lib.configOL.midgameReady = ready;
+			this.send("server", "config", lib.configOL);
+		}
 	}
 	syncConnectProfile() {
 		if (!_status.connectMode) {
@@ -5006,6 +5023,7 @@ ${e instanceof Error ? e.stack : String(e)}`);
 		const config = { ...lib.configOL };
 		delete config.gameStarted;
 		delete config.observeReady;
+		delete config.midgameReady;
 		const roomId = game.onlineroom && typeof game.roomId === "string" ? game.roomId : undefined;
 		game.saveConnectRematch({
 			host: true,
@@ -6618,6 +6636,7 @@ ${e instanceof Error ? e.stack : String(e)}`);
 			hsMap.set(target, target.getCards("h"));
 		}
 		_status.over = true;
+		game.updateMidgameAvailability();
 		ui.control.show();
 		ui.clear();
 		game.stopCountChoose();
