@@ -329,7 +329,7 @@ export async function boot() {
 
 	const toLoad: Promise<any>[] = [];
 
-	let show_splash;
+	let show_splash = true;
 	switch (config.get("show_splash")) {
 		case "off":
 			show_splash = false;
