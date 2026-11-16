@@ -111,7 +111,7 @@
 	"favouriteMode": [],
 	"recentIP": [],
 	"brokenFile": [],
-	"max_loadtime": "20000",
+	"max_loadtime": "60000",
 	"theme": "simple",
 	"layout": "long2",
 	"cardback_style": "liusha",

@@ -1419,7 +1419,7 @@ export class Library {
 				max_loadtime: {
 					name: "最长载入时间",
 					intro: "设置游戏从启动到完成载入所需的最长时间，超过此时间未完成载入会报错，若设备较慢或安装了较多扩展可适当延长此时间",
-					init: "5000",
+					init: "60000",
 					unfrequent: true,
 					item: {
 						5000: "5秒",
@@ -1429,7 +1429,7 @@ export class Library {
 					},
 					onclick(item) {
 						game.saveConfig("max_loadtime", item);
-						if (item === "5000") {
+						if (item === "60000") {
 							localStorage.removeItem(lib.configprefix + "loadtime");
 						} else {
 							localStorage.setItem(lib.configprefix + "loadtime", item);
