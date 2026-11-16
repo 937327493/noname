@@ -4,11 +4,12 @@ import { userAgentLowerCase, device } from "@/util/index.js";
 import { loadBuildInfo } from "@/util/meta.js";
 import "core-js-bundle";
 // 保证打包时存在(importmap)
-import "vue/dist/vue.esm-browser.js";
+import "vue/dist/vue.esm-browser.prod.js";
 
 (async () => {
 	try {
 		lib.device = device;
+		window.startupLoading.show("正在准备运行环境…");
 
 		// 预加载脚本
 		const path = "/preload.js";
@@ -44,12 +45,14 @@ https://www.gnu.org/licenses/gpl-3.0.html
 				localStorage.setItem("gplv3_noname_alerted", String(true));
 			} else {
 				game.exit();
+				window.startupLoading.hide();
 				return;
 			}
 		}
 
 		await boot();
 	} catch (e) {
+		window.startupLoading.fail();
 		console.error(e);
 		alert(`《无名杀》加载内容失败
 浏览器UA信息: 

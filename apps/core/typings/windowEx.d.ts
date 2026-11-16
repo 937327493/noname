@@ -29,6 +29,13 @@ declare interface Window {
 
     resetGameTimeout: number;
 
+    /** 启动资源加载提示 */
+    startupLoading: {
+        show(message?: string): void;
+        hide(): void;
+        fail(): void;
+    };
+
     // cordovaLoadTimeout?: number;
 
     // /** window.onerror的参数列表 */

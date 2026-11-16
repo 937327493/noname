@@ -38,6 +38,7 @@ export async function boot() {
 	setWindowListener();
 	setOnError({ lib, game, get, _status });
 
+	window.startupLoading.show("正在读取游戏配置…");
 	await loadConfig();
 
 	// 兼容原有鏖战布尔设置，保持原规则并正确显示新的选择菜单。
@@ -110,6 +111,7 @@ export async function boot() {
 	}
 	game.layout = layout;
 
+	window.startupLoading.show("正在加载界面样式…");
 	await loadCss();
 	initSheet();
 
@@ -302,6 +304,7 @@ export async function boot() {
 		}
 	});
 
+	window.startupLoading.show("正在加载扩展与游戏资源…");
 	const extensionlist = await getExtensionList();
 	if (extensionlist.length) {
 		_status.extensionLoading = [];
@@ -485,6 +488,7 @@ export async function boot() {
 		let node = ui.create.div("#splash", document.body);
 
 		let { promise, resolve } = Promise.withResolvers();
+		window.startupLoading.hide();
 		await splash.init(node, resolve);
 
 		let result = await promise;
@@ -495,6 +499,7 @@ export async function boot() {
 		}
 		window.resetGameTimeout = setTimeout(lib.init.reset, configLoadTime);
 		delete window.inSplash;
+		window.startupLoading.show("正在加载所选模式…");
 		game.saveConfig("mode", result);
 		await importMode(result);
 	}
@@ -510,6 +515,7 @@ export async function boot() {
 	lib.connectCharacterPack = [];
 	lib.connectCardPack = [];
 
+	window.startupLoading.show("正在初始化游戏内容…");
 	const currentMode = lib.imported.mode[lib.config.mode];
 	loadMode(currentMode);
 	// 为了模式扩展，两个东西删不了
@@ -590,6 +596,7 @@ export async function boot() {
 		delete lib.init.startBefore;
 	}
 
+	window.startupLoading.show("正在创建游戏界面…");
 	ui.create.arena();
 	game.createEvent("game", false).setContent(lib.init.start);
 	if (lib.mode[lib.config.mode] && lib.mode[lib.config.mode].fromextension) {
@@ -605,6 +612,7 @@ export async function boot() {
 	}
 
 	game.loop();
+	requestAnimationFrame(() => requestAnimationFrame(window.startupLoading.hide));
 }
 
 async function readExtensionInfoName(infoFile: URL): Promise<string> {
