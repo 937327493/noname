@@ -46,13 +46,21 @@ export async function importMode(name: string) {
 			return;
 		}
 	}
-	const alreadyModernMode = lib.config.moderned_modes || [];
-	const path = alreadyModernMode.includes(name) && import.meta.env.DEV ? `/mode/${name}/index` : `/mode/${name}`;
-	await importFunction("mode", path);
+	await importFunction("mode", getModePath(name));
 }
 
-async function importFunction(type: "card" | "character" | "extension" | "mode", path: string): Promise<void> {
-	const modeContent = await import(/* @vite-ignore */ path + ".js").catch(async e => {
+export async function preloadConnectMode() {
+	if (lib.config.all.mode.includes("connect") && !lib.mode.connect?.fromextension) {
+		await loadModule(getModePath("connect"));
+	}
+}
+
+function getModePath(name: string) {
+	return import.meta.env.DEV && lib.config.moderned_modes?.includes(name) ? `/mode/${name}/index` : `/mode/${name}`;
+}
+
+function loadModule(path: string) {
+	return import(/* @vite-ignore */ path + ".js").catch(async e => {
 		if (window.isSecureContext) {
 			try {
 				return await import(/* @vite-ignore */ path + ".ts");
@@ -62,6 +70,10 @@ async function importFunction(type: "card" | "character" | "extension" | "mode",
 		}
 		throw e;
 	});
+}
+
+async function importFunction(type: "card" | "character" | "extension" | "mode", path: string): Promise<void> {
+	const modeContent = await loadModule(path);
 	if (!modeContent.type) return;
 	if (modeContent.type !== type) {
 		throw new Error(`Loaded Content doesn't match "${type}" (received "${modeContent.type}").`);

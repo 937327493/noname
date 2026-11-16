@@ -5,7 +5,7 @@ import * as config from "@/util/config.js";
 import { setOnError } from "@/util/error.ts";
 import { security, initializeSandboxRealms } from "@/util/sandbox.js";
 import { CacheContext } from "@/library/cache/cacheContext.js";
-import { importCardPack, importCharacterPack, importExtension, importMode } from "./import.js";
+import { importCardPack, importCharacterPack, importExtension, importMode, preloadConnectMode } from "./import.js";
 import { loadCard, loadCardPile, loadCharacter, loadExtension, loadMode, loadPlay } from "./loading.js";
 
 // 无名杀，启动！
@@ -355,7 +355,11 @@ export async function boot() {
 
 	const packLoading = new AbortController();
 	try {
-		await Promise.all([(interfacePainted ?? Promise.resolve()).then(() => loadBasePacks(resetStartupTimeout, packLoading.signal, modeSelected)), modeReady]);
+		const packsReady = (interfacePainted ?? Promise.resolve()).then(() => {
+			if (modeSelected && window.inSplash) void preloadConnectMode().catch(() => {});
+			return loadBasePacks(resetStartupTimeout, packLoading.signal, modeSelected);
+		});
+		await Promise.all([packsReady, modeReady]);
 	} catch (error) {
 		packLoading.abort();
 		clearTimeout(window.resetGameTimeout);
@@ -623,9 +627,13 @@ async function loadBasePacks(resetStartupTimeout: () => void, signal: AbortSigna
 	const { cards, characters } = config.get("all");
 	const warmCards = ["standard", "extra"];
 	const warmCharacters = ["standard", "refresh"];
-	const warmup = [...cards.filter(name => warmCards.includes(name)).map(name => () => importCardPack(name)), ...characters.filter(name => warmCharacters.includes(name)).map(name => () => importCharacterPack(name))];
-	const deferred = [...cards.filter(name => !warmCards.includes(name)).map(name => () => importCardPack(name)), ...characters.filter(name => !warmCharacters.includes(name)).map(name => () => importCharacterPack(name)), ...["rank", "replace", "perfectPairs"].map(name => () => lib.init.promises.js(`${lib.assetURL}character`, name))];
-	const total = warmup.length + deferred.length;
+	const cardTasks = cards.map(name => ({ load: () => importCardPack(name), warm: warmCards.includes(name), online: !lib.config.connect_cards.includes(name) }));
+	const characterTasks = characters.map(name => ({ load: () => importCharacterPack(name), warm: warmCharacters.includes(name), online: !lib.config.connect_characters.includes(name) }));
+	const metadataTasks = ["rank", "replace", "perfectPairs"].map(name => ({ load: () => lib.init.promises.js(`${lib.assetURL}character`, name), warm: false, online: true }));
+	const tasks = [...cardTasks, ...characterTasks, ...metadataTasks];
+	const defaultQueue = [...tasks.filter(task => task.warm), ...tasks.filter(task => !task.warm)];
+	const prioritizeOnline = (packs: typeof tasks) => [...packs.filter(task => task.online), ...packs.filter(task => !task.online)];
+	const total = tasks.length;
 	let completed = 0;
 	const report = () => {
 		if (signal.aborted) return;
@@ -633,16 +641,19 @@ async function loadBasePacks(resetStartupTimeout: () => void, signal: AbortSigna
 		if (completed === total && window.inSplash) {
 			window.startupLoading.hide();
 		} else {
-			window.startupLoading.progress(completed, total, Boolean(window.inSplash), Boolean(modeSelected && window.inSplash && completed === warmup.length));
+			window.startupLoading.progress(completed, total, Boolean(window.inSplash), !window.inSplash && lib.config.mode === "connect");
 		}
 	};
 	report();
-	const loadTasks = async (tasks: (() => Promise<unknown>)[], concurrency: number) => {
-		let next = 0;
+	let next = 0;
+	let active = 0;
+	const queue = modeSelected || lib.config.mode === "connect" ? prioritizeOnline(defaultQueue) : [...defaultQueue];
+	const loadTasks = async (concurrency: number) => {
 		await Promise.all(
-			Array.from({ length: Math.min(concurrency, tasks.length) }, async () => {
-				while (!signal.aborted && next < tasks.length) {
-					const load = tasks[next++];
+			Array.from({ length: Math.min(concurrency, queue.length - next) }, async () => {
+				active++;
+				while (!signal.aborted && next < queue.length) {
+					const { load } = queue[next++];
 					try {
 						await load();
 					} catch (error) {
@@ -651,15 +662,20 @@ async function loadBasePacks(resetStartupTimeout: () => void, signal: AbortSigna
 					completed++;
 					report();
 				}
+				active--;
 			})
 		);
 	};
 	if (modeSelected) {
-		await loadTasks(warmup, 4);
-		await modeSelected;
-		await loadTasks(deferred, 6);
+		const backgroundLoading = loadTasks(4);
+		const mode = await modeSelected;
+		if (mode !== "connect") {
+			const pending = new Set(queue.slice(next));
+			queue.splice(next, pending.size, ...defaultQueue.filter(task => pending.has(task)));
+		}
+		await Promise.all([backgroundLoading, loadTasks(6 - active)]);
 	} else {
-		await loadTasks([...warmup, ...deferred], 6);
+		await loadTasks(6);
 	}
 }
 

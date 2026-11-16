@@ -9,6 +9,7 @@
 	<!-- 禁止缩放 手机端全屏 -->
 	<meta name="viewport" content="user-scalable=no, viewport-fit=cover" />
 	<title>无名杀</title>
+	<link rel="icon" href="./game/favicon.ico" />
 	<style>
 		.startup-loading {
 			position: fixed;
@@ -175,10 +176,10 @@
 					overlay.setAttribute("aria-busy", "true");
 					if (message) setMessage(overlay, message);
 				},
-				progress(completed, total, compact, waitingForMode) {
+				progress(completed, total, compact, online) {
 					const overlay = getOverlay();
 					if (!overlay) return;
-					this.show(waitingForMode ? `基础资源 ${completed}/${total} · 选择模式后继续` : `正在加载基础资源… ${completed}/${total}`);
+					this.show(`正在加载${online ? "联机" : "基础"}资源… ${completed}/${total}`);
 					overlay.classList.add("startup-loading--determinate");
 					overlay.classList.toggle("startup-loading--compact", compact);
 					const percent = total > 0 ? Math.min(100, Math.max(0, (completed / total) * 100)) : 0;

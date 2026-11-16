@@ -9992,6 +9992,9 @@ export class Library {
 	 */
 	translate = new Proxy(
 		{
+			// SP 和移动版的韩遂共用骁袭语音文件。
+			"#xiaoxi_hansui1": "两军交战，勇者为胜！",
+			"#xiaoxi_hansui2": "打你个措手不及！",
 			flower: "鲜花",
 			egg: "鸡蛋",
 			wine: "酒杯",
