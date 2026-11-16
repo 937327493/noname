@@ -331,6 +331,7 @@ export function createConfig(config, position) {
 				input.innerHTML = input.innerHTML.slice(0, 12);
 				game.saveConfig("connect_nickname", input.innerHTML);
 				game.saveConfig("connect_nickname", input.innerHTML, "connect");
+				game.syncConnectProfile();
 			};
 		} else if (config.name == "联机头像") {
 			// 显示当前配置的武将名称（直接使用翻译，不额外添加前缀）

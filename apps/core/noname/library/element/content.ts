@@ -4594,7 +4594,11 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 					game.me.wait(result => resolve(!!result?.bool));
 					next.forResult()
 						.then(result => game.me.unwait(result))
-						.catch(() => resolve(false));
+						.catch(() => {
+							// forResult 失败也必须释放 wait 回调,否则 torespond 残留会卡死本轮所有 unwait
+							game.me.unwait(false);
+							resolve(false);
+						});
 				} else {
 					resolve(false);
 				}
@@ -4658,7 +4662,13 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 			}
 			current._start_cards = cards;
 		});
-		await Promise.allSettled(events);
+		const settled = await Promise.allSettled(events);
+		// 换手牌中途失败意味着该玩家手牌已被弃置却未补回,不能静默吞掉,至少要留下日志
+		for (const state of settled) {
+			if (state.status === "rejected") {
+				console.error("replaceHandcardsOL: 玩家置换手牌失败", state.reason);
+			}
+		}
 	},
 	phase: [
 		async (event, trigger, player) => {
@@ -7609,7 +7619,11 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 					game.me.wait(result => resolve(result ?? {}));
 					next.forResult()
 						.then(result => game.me.unwait(result))
-						.catch(() => resolve({}));
+						.catch(() => {
+							// forResult 失败也必须释放 wait 回调,否则 torespond 残留会卡死本轮所有 unwait
+							game.me.unwait({});
+							resolve({});
+						});
 				} else {
 					const next = chooseLocal(current);
 					next.forResult()
@@ -7676,7 +7690,11 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 					game.me.wait(result => resolve(result ?? {}));
 					next.forResult()
 						.then(result => game.me.unwait(result))
-						.catch(() => resolve({}));
+						.catch(() => {
+							// forResult 失败也必须释放 wait 回调,否则 torespond 残留会卡死本轮所有 unwait
+							game.me.unwait({});
+							resolve({});
+						});
 				} else {
 					const next = chooseLocal(current, args);
 					next.forResult()
@@ -7748,13 +7766,23 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 								if (_status.connectMode) {
 									game.me.wait(solver);
 								}
-								return next.forResult().then(result => {
-									if (_status.connectMode) {
-										game.me.unwait(result, current);
-									} else {
-										solver(result, current);
-									}
-								});
+								return next
+									.forResult()
+									.then(result => {
+										if (_status.connectMode) {
+											game.me.unwait(result, current);
+										} else {
+											solver(result, current);
+										}
+									})
+									.catch(() => {
+										// 失败时同样要释放 wait 回调并结束本次等待,否则 Promise.all 永远挂起
+										if (_status.connectMode) {
+											game.me.unwait(null, current);
+										} else {
+											solver(null, current);
+										}
+									});
 							}
 						})
 				)

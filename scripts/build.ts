@@ -1,14 +1,17 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
-spawnSync("pnpm -F noname... build", {
-	shell: true,
-	stdio: "inherit",
-});
-
-spawnSync("pnpm -F ./packages/extension/** build", {
-	shell: true,
-	stdio: "inherit",
-});
+// 构建失败必须中止,否则会把上一次的旧产物当成新包发出去
+for (const args of [
+	["-F", "noname...", "build"],
+	["-F", "./packages/extension/**", "build"],
+]) {
+	const result = spawnSync("pnpm", args, {
+		stdio: "inherit",
+	});
+	if (result.error || result.status !== 0) {
+		throw new Error(`构建失败,已中止打包: pnpm ${args.join(" ")} (exit ${result.status ?? result.error.message})`);
+	}
+}
 
 console.log("合并打包结果");
 await fs.rm("dist", { recursive: true, force: true });

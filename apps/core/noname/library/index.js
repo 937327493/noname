@@ -7398,7 +7398,8 @@ export class Library {
 					frequent: true,
 					onclick(item) {
 						game.saveConfig("connect_nickname", item);
-						game.saveConfig("connect_avatar", item, "connect");
+						game.saveConfig("connect_nickname", item, "connect");
+						game.syncConnectProfile();
 					},
 				},
 				connect_avatar: {
@@ -7409,6 +7410,7 @@ export class Library {
 					onclick(item) {
 						game.saveConfig("connect_avatar", item);
 						game.saveConfig("connect_avatar", item, "connect");
+						game.syncConnectProfile();
 					},
 					onblur() {
 						const input = this;
@@ -7438,6 +7440,7 @@ export class Library {
 							const id = matches[0];
 							game.saveConfig("connect_avatar", id);
 							game.saveConfig("connect_avatar", id, "connect");
+							game.syncConnectProfile();
 							input.innerHTML = lib.translate[id];
 						} else {
 							game.closeMenu();
@@ -7450,6 +7453,7 @@ export class Library {
 								button.listen(function () {
 									game.saveConfig("connect_avatar", characterId);
 									game.saveConfig("connect_avatar", characterId, "connect");
+									game.syncConnectProfile();
 									input.innerHTML = lib.translate[characterId];
 									dialog.close();
 								});
@@ -10344,7 +10348,7 @@ export class Library {
 				if (_status.connectCallback) {
 					_status.connectCallback(false);
 					delete _status.connectCallback;
-				} else {
+				} else if (!game.online && !game.onlineroom) {
 					alert("连接失败");
 				}
 			},
@@ -10357,10 +10361,14 @@ export class Library {
 					delete _status.connectCallback;
 				}
 				if (game.online || game.onlineroom) {
-					if ((game.servermode || game.onlinehall) && _status.over) {
+					if (game.onlineroom && !game.online && !_status.over) {
+						lib.message.client.selfclose("房主连接已断开，本局已结束，请重新创建或加入房间。");
+					} else if ((game.servermode || game.onlinehall) && _status.over) {
 						void 0;
 					} else {
 						localStorage.setItem(lib.configprefix + "directstart", true);
+						// 标记"意外断线":重载进联机模式后用上次地址自动重连,不再弹地址输入框
+						localStorage.setItem(lib.configprefix + "reconnect", "true");
 						game.reload();
 					}
 				} else {
@@ -11953,6 +11961,12 @@ export class Library {
 					this.send("denied", "banned");
 				} else if (config.id && lib.playerOL && lib.playerOL[config.id]) {
 					var player = lib.playerOL[config.id];
+					var previousClient = player.ws;
+					if (previousClient && previousClient !== this && !previousClient.closed) {
+						previousClient.closed = true;
+						lib.node.clients.remove(previousClient);
+						previousClient.ws.close();
+					}
 					player.setNickname();
 					player.ws = this;
 					player.isAuto = false;
@@ -11960,6 +11974,9 @@ export class Library {
 					game.broadcast(function (player) {
 						player.setNickname();
 					}, player);
+					var nickname = get.plainText(player.nickname);
+					game.log("玩家 ", `#y${nickname}`, " 重连成功");
+					game.me.chat(`玩家 <span style="font-weight: bold; color: rgb(126, 180, 255)">${nickname}</span> 重连成功`);
 					this.send("reinit", lib.configOL, get.arenaState(), game.getState ? game.getState() : {}, game.ip, null, _status.onreconnect, _status.cardtag, _status.postReconnect);
 				} else if (version != lib.versionOL) {
 					this.send("denied", "version");
@@ -12078,6 +12095,22 @@ export class Library {
 			/**
 			 * @this {import("./element/client.js").Client}
 			 */
+			changeProfile(nickname, avatar) {
+				if (typeof nickname !== "string" || typeof avatar !== "string") {
+					return;
+				}
+				this.nickname = nickname.slice(0, 12);
+				this.avatar = avatar;
+				if (_status.waitingForPlayer && game.connectPlayers) {
+					const player = game.connectPlayers.find(player => player.playerid === this.id);
+					if (player) {
+						player.initOL(this.nickname, this.avatar);
+						game.updateWaiting();
+					}
+				} else if (lib.playerOL[this.id]) {
+					game.updateConnectProfile(lib.playerOL[this.id], this.nickname, this.avatar);
+				}
+			},
 			changeRoomConfig(config) {
 				if (this.id == game.onlinezhu) {
 					game.broadcastAll(function (config) {
@@ -12391,15 +12424,22 @@ export class Library {
 					lib.wsOL[id].onclose();
 				}
 			},
-			selfclose: function () {
-				if (game.online || game.onlineroom) {
-					if ((game.servermode || game.onlinehall) && _status.over) {
-						// later
-					} else {
-						game.saveConfig("tmp_user_roomId");
-					}
+			selfclose: function (reason) {
+				_status.reconnecting = false;
+				game.saveConfig("reconnect_info");
+				game.saveConfig("tmp_owner_roomId");
+				game.saveConfig("tmp_user_roomId");
+				localStorage.removeItem(lib.configprefix + "reconnect");
+				localStorage.setItem(lib.configprefix + "directstart", "true");
+				if (game.ws) {
+					game.ws._nocallback = true;
+					game.ws.close();
 				}
-				game.ws.close();
+				game.online = false;
+				game.onlineroom = false;
+				game.onlinehall = false;
+				game.saveConfig("mode", "connect", false, game.reload);
+				alert(reason || "房主已断开，本局已结束，请重新创建或加入房间。");
 			},
 			reloadroom: function (forced) {
 				// if (window.isNonameServer && (forced || !_status.protectingroom)) {
@@ -12415,7 +12455,17 @@ export class Library {
 				ui.create.connecting(true);
 			},
 			enterroomfailed: function () {
-				alert("请稍后再试");
+				if (_status.reconnecting) {
+					alert("无法恢复原房间，房主可能已离线，本局已结束。");
+					game.saveConfig("reconnect_info");
+					game.saveConfig("tmp_owner_roomId");
+					game.saveConfig("tmp_user_roomId");
+					game.onlineID = null;
+					game.roomId = null;
+				} else {
+					alert("请稍后再试");
+				}
+				_status.reconnecting = false;
 				_status.enteringroom = false;
 				ui.create.connecting(true);
 			},
@@ -12511,7 +12561,7 @@ export class Library {
 											n--;
 											if (findRoom(id)) {
 												clearInterval(interval);
-												game.send("server", "enter", id, get.connectNickname(), lib.config.connect_avatar);
+												game.send("server", "enter", id, get.connectNickname(), lib.config.connect_avatar, _status.reconnecting ? game.onlineID : undefined);
 											}
 										} else {
 											ui.create.connecting(true);
@@ -12534,7 +12584,7 @@ export class Library {
 							}
 						} else {
 							ui.create.connecting();
-							game.send("server", game.roomId == game.onlineKey ? "create" : "enter", game.roomId, get.connectNickname(), lib.config.connect_avatar);
+							game.send("server", game.roomId == game.onlineKey ? "create" : "enter", game.roomId, get.connectNickname(), lib.config.connect_avatar, _status.reconnecting ? game.onlineID : undefined);
 						}
 					}
 					lib.init.onfree();
@@ -12581,12 +12631,12 @@ export class Library {
 							ui.rooms.push(player);
 						}
 					}
-					if (!_status.requestReadClipboard && get.config("read_clipboard", "connect")) {
-						const read = text => {
+					if (get.config("read_clipboard", "connect")) {
+						const read = (text, confirmed = false) => {
 							try {
 								var roomId = text.split("\n")[1].match(/\d+/);
 								var caption = ui.rooms.find(caption => caption.key == roomId);
-								if (caption && (_status.read_clipboard_text || confirm(`是否通过复制的内容加入${roomId}房间？`))) {
+								if (caption && (_status.read_clipboard_text || confirmed || confirm(`是否通过复制的内容加入${roomId}房间？`))) {
 									ui.click.connectroom.call(caption);
 									delete _status.read_clipboard_text;
 								}
@@ -12594,31 +12644,31 @@ export class Library {
 								console.log(e);
 							}
 						};
-						//每次启动只请求一次
-						_status.requestReadClipboard = true;
-						if (_status.read_clipboard_text) {
-							read(_status.read_clipboard_text);
-						} else {
-							window.focus();
-							if (navigator.clipboard && lib.node) {
-								navigator.clipboard
-									.readText()
-									.then(read)
-									.catch(_ => {});
-							} else {
-								var input = ui.create.node("textarea", ui.window, { opacity: "0" });
-								input.select();
-								var result = document.execCommand("paste");
-								input.blur();
-								ui.window.removeChild(input);
-								if (result || input.value.length > 0) {
-									read(input.value);
-								} else if (confirm("是否输入邀请链接以加入房间？")) {
-									game.prompt("请输入邀请链接", text => {
+						if (!ui.inviteButton) {
+							ui.inviteButton = ui.create.system(
+								"输入邀请链接",
+								() => {
+									game.promises.prompt("请输入邀请链接").then(text => {
 										if (typeof text === "string" && text.length > 0) {
-											read(text);
+											read(text, true);
 										}
 									});
+								},
+								true
+							);
+						}
+						if (!_status.requestReadClipboard) {
+							//每次启动只自动请求一次，手工入口不受影响
+							_status.requestReadClipboard = true;
+							if (_status.read_clipboard_text) {
+								read(_status.read_clipboard_text);
+							} else {
+								window.focus();
+								if (navigator.clipboard) {
+									navigator.clipboard
+										.readText()
+										.then(read)
+										.catch(_ => {});
 								}
 							}
 						}
@@ -12664,6 +12714,7 @@ export class Library {
 				alert(str);
 			},
 			init: function (id, config, ip, servermode, roomId) {
+				_status.reconnecting = false;
 				game.online = true;
 				game.onlineID = id;
 				game.ip = ip;
@@ -12772,6 +12823,7 @@ export class Library {
 				}
 			},
 			reinit: function (config, state, state2, ip, observe, onreconnect, cardtag, postReconnect) {
+				_status.reconnecting = false;
 				ui.auto.show();
 				ui.pause.show();
 				game.clearConnect();
@@ -13200,6 +13252,15 @@ export class Library {
 				}
 			},
 			denied: function (reason) {
+				const reconnecting = _status.reconnecting;
+				_status.reconnecting = false;
+				if (reconnecting && reason == "gaming") {
+					game.saveConfig("reconnect_info");
+					game.saveConfig("tmp_owner_roomId");
+					game.saveConfig("tmp_user_roomId");
+					game.onlineID = null;
+					game.roomId = null;
+				}
 				switch (reason) {
 					case "version":
 						alert("加入失败：版本不匹配，请将游戏更新至最新版");
@@ -13208,7 +13269,7 @@ export class Library {
 						game.saveConfig("reconnect_info");
 						break;
 					case "gaming":
-						alert("加入失败：游戏已开始");
+						alert(reconnecting ? "无法恢复原座位，本局已结束或房间已失效。" : "加入失败：游戏已开始");
 						break;
 					case "number":
 						alert("加入失败：房间已满");
@@ -13328,6 +13389,15 @@ export class Library {
 				}
 				_status.gameStarted = true;
 				game.showHistory();
+			},
+			updateConnectProfile: function (id, nickname, avatar) {
+				const player = lib.playerOL[id];
+				if (!player) {
+					return;
+				}
+				player.nickname = nickname;
+				player.avatar = avatar;
+				player.setNickname();
 			},
 			updateWaiting: function (map) {
 				if (!game.connectPlayers) {

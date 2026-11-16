@@ -2758,16 +2758,20 @@ export class Create {
 						if (game.online) {
 							try {
 								game.ws.send(JSON.stringify(["cardPile"]));
-								game.ws.addEventListener(
-									"message",
-									function (e) {
-										let data = JSON.parse(JSON.parse(e.data)[0]);
-										if (data.type == "cardPile") {
-											resolve(data.data);
-										}
-									},
-									{ once: true }
-								);
+								const onMessage = e => {
+									let data;
+									try {
+										data = JSON.parse(JSON.parse(e.data)[0]);
+									} catch (error) {
+										return;
+									}
+									if (data.type == "cardPile") {
+										game.ws.removeEventListener("message", onMessage);
+										resolve(data.data);
+									}
+								};
+								// 不能用 once:true:联机时下一条到达的可能是无关广播,会把监听消费掉导致永久等待
+								game.ws.addEventListener("message", onMessage);
 							} catch (error) {
 								resolve(false);
 							}
@@ -2786,6 +2790,8 @@ export class Create {
 
 				let result = await getResult();
 				if (!result) {
+					// 拿不到数据也要解除暂停,否则游戏永久卡住
+					game.resume2();
 					return;
 				}
 				let drawPile = result.drawPile;

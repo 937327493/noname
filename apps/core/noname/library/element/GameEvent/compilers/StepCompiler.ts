@@ -79,7 +79,8 @@ class StepParser {
 				try {
 					this.packStep(head);
 				} catch (e) {
-					skipIndex = result.index + result[0].length;
+					// result.index 是相对 slice(skipIndex) 的偏移,叠加后才是绝对位置;写错会来回跳造成死循环
+					skipIndex += result.index + result[0].length;
 					continue;
 				}
 			}

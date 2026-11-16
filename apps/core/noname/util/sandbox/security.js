@@ -234,7 +234,14 @@ function readStorage(key) {
 		return {};
 	}
 
-	const mayArray = JSON.parse(value);
+	let mayArray;
+	try {
+		mayArray = JSON.parse(value);
+	} catch (error) {
+		// localStorage 里的值可能不是合法 JSON(手改/旧格式),不能让信任弹窗功能整体报错
+		console.log(error);
+		return {};
+	}
 
 	if (!mayArray || typeof mayArray != "object") {
 		return {};

@@ -83,6 +83,7 @@ export default {
 						return;
 					}
 					if (event.textnode) {
+						_status.reconnecting = false;
 						alert(invitationText ? "邀请链接解析失败" : "连接失败");
 						event.textnode.textContent = "输入联机地址";
 					}
@@ -163,9 +164,15 @@ export default {
 				},
 				220
 			);
+			// 意外断线(ws.onclose 写入的 reconnect 标记)时用上次地址自动重连,免得每次断线都重新输地址;
+			// 连接成功后 reconnect_info 会自动回到原房间,连接失败则回落到本输入界面
+			if (localStorage.getItem(`${lib.configprefix}reconnect`) && lib.config.last_ip) {
+				localStorage.removeItem(`${lib.configprefix}reconnect`);
+				_status.reconnecting = true;
+				connect();
+			}
 			if (get.config("read_clipboard", "connect")) {
-				let ced = false;
-				const read = text => {
+				const read = (text, confirmed = false) => {
 					if (connectionStarted) {
 						return;
 					}
@@ -175,7 +182,7 @@ export default {
 							return;
 						}
 						const ip = text2.slice(5);
-						if (ip.length > 0 && (ced || confirm("是否根据剪贴板的邀请链接以进入联机地址和房间？"))) {
+						if (ip.length > 0 && (confirmed || confirm("是否根据剪贴板的邀请链接以进入联机地址和房间？"))) {
 							node.textContent = ip;
 							connect(null, text);
 						}
@@ -183,33 +190,27 @@ export default {
 						console.log(e);
 					}
 				};
-				const promptInvite = () => {
-					if (connectionStarted) {
-						return;
-					}
-					if (confirm("是否输入邀请链接以进入联机地址和房间？")) {
-						ced = true;
+				ui.inviteButton = ui.create.system(
+					"输入邀请链接",
+					() => {
+						if (connectionStarted) {
+							return;
+						}
 						game.promises.prompt("请输入邀请链接").then(text => {
 							if (typeof text === "string" && text.length > 0) {
-								read(text);
+								read(text, true);
 							}
 						});
-					}
-				};
+					},
+					true
+				);
 				window.focus();
-				if (navigator.clipboard && lib.node) {
-					navigator.clipboard.readText().then(read).catch(promptInvite);
-				} else {
-					const input = ui.create.node("textarea", ui.window, { opacity: "0" });
-					input.select();
-					const result = document.execCommand("paste");
-					input.blur();
-					ui.window.removeChild(input);
-					if (result || input.value.length > 0) {
-						read(input.value);
-					} else {
-						promptInvite();
-					}
+				// 剪贴板读不到时保留手工入口，不在启动过程中弹窗打断
+				if (navigator.clipboard) {
+					navigator.clipboard
+						.readText()
+						.then(read)
+						.catch(() => void 0);
 				}
 			}
 			lib.init.onfree();

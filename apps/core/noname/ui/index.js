@@ -414,14 +414,14 @@ export class UI {
 				thiswidth += 8;
 				length += thiswidth;
 				if (first) {
-					leftwidths.push(thiswidth);
+					leftwidths.unshift(thiswidth);
 				} else {
 					widths.push(thiswidth);
 				}
 			} else {
 				length += node.offsetWidth;
 				if (first) {
-					leftwidths.push(node.offsetWidth);
+					leftwidths.unshift(node.offsetWidth);
 				} else {
 					widths.push(node.offsetWidth);
 				}
@@ -432,7 +432,6 @@ export class UI {
 				controls.push(node);
 			}
 		};
-		widths = leftwidths.concat(widths);
 		var staylefts = [];
 		for (var i = 0; i < ui.control.childNodes.length; i++) {
 			if (ui.control.childNodes[i].classList.contains("removing") || ui.control.childNodes[i].classList.contains("controlscrollbar")) {
@@ -501,6 +500,8 @@ export class UI {
 				minoffset = last._offset + last.offsetWidth + (get.is.phoneLayout() ? 18 : 12);
 			}
 		}
+		// 须在所有 add() 填充完 widths/leftwidths 之后再合并:stayleft 在 controls 最前(unshift),对应宽度也要排到最前
+		widths = leftwidths.concat(widths);
 		if (!controls.length) {
 			return;
 		}

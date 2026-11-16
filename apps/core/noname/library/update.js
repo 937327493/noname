@@ -73,11 +73,11 @@ export function parseSize(limit) {
 	let sizeStr = size + "";
 	// 获取小数点处的索引
 	let index = sizeStr.indexOf(".");
-	// 获取小数点后两位的值
-	let dou = sizeStr.slice(index + 1, 2);
+	// 获取小数点后两位的值(slice 第二个参数是结束索引,不是长度)
+	let dou = sizeStr.slice(index + 1, index + 3);
 	// 判断后两位是否为00，如果是则删除00
 	if (dou == "00") {
-		return sizeStr.slice(0, index) + sizeStr.slice(index + 3, 2);
+		return sizeStr.slice(0, index) + sizeStr.slice(index + 3);
 	}
 	return size;
 }

@@ -42,24 +42,32 @@ export default class PauseManager {
 class Deferred {
 	#promise: Promise<void> | null;
 	#resolver: (() => void) | null;
+	// resolve() 后允许立即 start()，延迟执行的微任务只能处理它捕获的那一轮状态
+	#resolved = false;
 	get isStarted() {
-		return !!this.#promise;
+		return !!this.#promise && !this.#resolved;
 	}
 	start() {
 		if (this.isStarted) {
 			return;
 		}
 		({ promise: this.#promise, resolve: this.#resolver } = Promise.withResolvers());
+		this.#resolved = false;
 	}
 	resolve() {
-		if (!this.isStarted) {
+		if (!this.#promise || this.#resolved) {
 			return;
 		}
+		const promise = this.#promise;
+		const resolver = this.#resolver;
+		this.#resolved = true;
 		Promise.resolve()
-			.then(() => this.#resolver && this.#resolver())
+			.then(() => resolver && resolver())
 			.then(() => {
-				this.#promise = null;
-				this.#resolver = null;
+				if (this.#promise === promise) {
+					this.#promise = null;
+					this.#resolver = null;
+				}
 			});
 	}
 	then(onfulfilled?: ((value: void) => void | PromiseLike<void>) | null, onrejected?: ((reason: any) => never | PromiseLike<never>) | null) {

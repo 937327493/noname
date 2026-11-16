@@ -77,7 +77,7 @@ export default function vitePluginJIT(importMap: Record<string, string> = {}): P
 		};
 
 		if (!("serviceWorker" in navigator)) {
-			alert(globalText.SERVICE_WORKER_NOT_SUPPORT);
+			console.warn(globalText.SERVICE_WORKER_NOT_SUPPORT);
 			return;
 		}
 

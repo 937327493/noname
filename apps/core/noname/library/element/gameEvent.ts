@@ -327,7 +327,11 @@ export class GameEvent implements PromiseLike<void> {
 				if (next.result) {
 					result = next.result;
 				}
-				this.next.shift();
+				// 子事件执行期间可能被 insertPhase 等插队(unshift),队头未必仍是 next,按引用移除而非 shift
+				const index = this.next.indexOf(next);
+				if (index > -1) {
+					this.next.splice(index, 1);
+				}
 			}
 		})().finally(() => (this.#waitNext = undefined));
 		return this.#waitNext;
@@ -421,7 +425,7 @@ export class GameEvent implements PromiseLike<void> {
 					map.todoList.add(toadd);
 				}
 				if (typeof map.player === "string") {
-					map.todoList.sort((a, b) => b.priority - a.priority || evt.playerMap.indexOf(a) - evt.playerMap.indexOf(b));
+					map.todoList.sort((a, b) => b.priority - a.priority || evt.playerMap.indexOf(a.player) - evt.playerMap.indexOf(b.player));
 				} else {
 					map.todoList.sort((a, b) => b.priority - a.priority);
 				}

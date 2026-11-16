@@ -505,7 +505,7 @@ export class Player extends HTMLDivElement {
 				if (a.name != b.name) {
 					return lib.sort.card(a.name, b.name);
 				} else if (a.suit != b.suit) {
-					return lib.suit.indexOf(a) - lib.suit.indexOf(b);
+					return lib.suit.indexOf(a.suit) - lib.suit.indexOf(b.suit);
 				} else {
 					return a.number - b.number;
 				}

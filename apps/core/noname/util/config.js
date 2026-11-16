@@ -61,8 +61,10 @@ export function load(name, type, reinitLocalStorage = true, reinitIndexedDB = un
 	}
 
 	let config;
+	// 非 data 类型共用 `${prefix}${type}` 一个 localStorage 键,读写必须是同一个键,损坏恢复才生效
+	let storageKey = `${lib.configprefix}${type === "data" ? name : type}`;
 	try {
-		let json = localStorage.getItem(`${lib.configprefix}${type === "data" ? name : type}`);
+		let json = localStorage.getItem(storageKey);
 		if (!json) {
 			throw new Error();
 		}
@@ -73,7 +75,7 @@ export function load(name, type, reinitLocalStorage = true, reinitIndexedDB = un
 	} catch (err) {
 		config = {};
 		if (reinitLocalStorage) {
-			localStorage.setItem(`${lib.configprefix}${name}`, "{}");
+			localStorage.setItem(storageKey, "{}");
 		}
 	}
 	return Promise.resolve(type === "data" ? config : config[name]);

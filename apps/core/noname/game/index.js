@@ -559,6 +559,12 @@ export class Game {
 				const parent = element.parentElement;
 
 				if (!position || !parent) {
+					// 无动画可播(位移过小或元素已脱离文档)时也要唤醒等待者,否则 await 永久挂起喵
+					const pendingResolve = game.$elementGotoAnimData.animationResolver.get(element);
+					if (pendingResolve) {
+						game.$elementGotoAnimData.animationResolver.delete(element);
+						pendingResolve();
+					}
 					continue;
 				}
 
@@ -657,7 +663,14 @@ export class Game {
 
 		// 剩下的东西交给发射函数就好哦喵
 		const { promise, resolve } = Promise.withResolvers();
-		game.$elementGotoAnimData.animationResolver.set(element, resolve);
+		// 同一元素可能有多个并发 $elementGoto 在等待,链式保留前一个,避免后注册的把先注册的等待者覆盖丢失喵
+		const previousResolver = game.$elementGotoAnimData.animationResolver.get(element);
+		game.$elementGotoAnimData.animationResolver.set(element, () => {
+			if (previousResolver) {
+				previousResolver();
+			}
+			resolve();
+		});
 		requestAnimationFrame(emitAllPendingAnimations);
 		await promise;
 	}
@@ -1951,6 +1964,28 @@ export class Game {
 			_status.currentPhase,
 			game.phaseNumber
 		);
+	}
+	syncConnectProfile() {
+		if (!_status.connectMode) {
+			return;
+		}
+		const nickname = get.connectNickname();
+		const avatar = lib.config.connect_avatar;
+		game.send("server", "changeAvatar", nickname, avatar);
+		if (game.online) {
+			game.send("changeProfile", nickname, avatar);
+		} else if (_status.waitingForPlayer && game.connectPlayers?.length) {
+			game.connectPlayers[0].initOL(nickname, avatar);
+			game.updateWaiting();
+		} else if (game.me) {
+			game.updateConnectProfile(game.me, nickname, avatar);
+		}
+	}
+	updateConnectProfile(player, nickname, avatar) {
+		if (!player) {
+			return;
+		}
+		game.broadcastAll("updateConnectProfile", player.playerid, nickname, avatar);
 	}
 	updateWaiting() {
 		const map = [];
@@ -5090,6 +5125,9 @@ ${e instanceof Error ? e.stack : String(e)}`);
 		}
 		let controls = ui.create.div(dialog);
 		let clickConfirm = function () {
+			if (!noinput && !input.value) {
+				return;
+			}
 			if (noinput) {
 				//给一个返回值使promise化正常使用
 				callback(true);
@@ -5111,7 +5149,8 @@ ${e instanceof Error ? e.stack : String(e)}`);
 		}
 		if (noinput || (str2 && str2.length > 0)) {
 			confirmNode.classList.remove("disabled");
-		} else {
+		}
+		if (!noinput) {
 			input.onkeydown = function (e) {
 				if (e.key == "Enter") {
 					clickConfirm();
@@ -5120,12 +5159,8 @@ ${e instanceof Error ? e.stack : String(e)}`);
 				}
 				e.stopPropagation();
 			};
-			input.onkeyup = function (e) {
-				if (input.value) {
-					confirmNode.classList.remove("disabled");
-				} else {
-					confirmNode.classList.remove("disabled");
-				}
+			input.oninput = function (e) {
+				confirmNode.classList.toggle("disabled", !input.value);
 				e.stopPropagation();
 			};
 			input.focus();
@@ -9066,6 +9101,10 @@ ${e instanceof Error ? e.stack : String(e)}`);
 		if (ui.hall_button) {
 			ui.hall_button.remove();
 			delete ui.hall_button;
+		}
+		if (ui.inviteButton) {
+			ui.inviteButton.remove();
+			delete ui.inviteButton;
 		}
 		if (ui.startServer) {
 			ui.startServer.remove();

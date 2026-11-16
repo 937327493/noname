@@ -2405,7 +2405,11 @@ else if (entry[1] !== void 0) stringifying[key] = JSON.stringify(entry[1]);*/
 			if (key === "cards") {
 				vcard[key] = get.infoCards(entry[1]);
 			} else if (entry[1] !== void 0) {
-				vcard[key] = JSON.parse(entry[1]);
+				try {
+					vcard[key] = JSON.parse(entry[1]);
+				} catch (error) {
+					console.log(error);
+				}
 			}
 			return vcard;
 		}, {});
@@ -2427,8 +2431,9 @@ else if (entry[1] !== void 0) stringifying[key] = JSON.stringify(entry[1]);*/
 				const value = datas[key];
 				if (Array.isArray(value)) {
 					vcard[key] = value.slice();
+				} else {
+					vcard[key] = value;
 				}
-				vcard[key] = value;
 			});
 			return vcard;
 		} else {
@@ -2820,41 +2825,48 @@ else if (entry[1] !== void 0) stringifying[key] = JSON.stringify(entry[1]);*/
 		return Array.from(cards || []).map(get.vcardInfoOL);
 	}
 	infoVCardOL(item) {
-		// @ts-expect-error ignore
-		const rawCard = JSON.parse(item.slice(14));
-		const datas = Object.entries(rawCard).reduce((vcard, entry) => {
-			const key = entry[0];
-			vcard[key] = get.parsedResult(entry[1]);
-			return vcard;
-		}, {});
+		let card;
+		try {
+			// @ts-expect-error ignore
+			const rawCard = JSON.parse(item.slice(14));
+			const datas = Object.entries(rawCard).reduce((vcard, entry) => {
+				const key = entry[0];
+				vcard[key] = get.parsedResult(entry[1]);
+				return vcard;
+			}, {});
 
-		const vid = datas.vcardID;
-		// @ts-expect-error ignore
-		if (!vid || !lib.vcardOL) {
-			return new lib.element.VCard(datas);
-		}
-		// @ts-expect-error ignore
-		if (vid in lib.vcardOL) {
+			const vid = datas.vcardID;
 			// @ts-expect-error ignore
-			const vcard = lib.vcardOL[vid];
-			//TODO: 这里暂时偷懒 直接用了delete和直接赋值 不妥
-			Object.keys(vcard).forEach(entry => {
-				delete vcard[entry];
-			});
-			Object.keys(datas).forEach(key => {
-				const value = datas[key];
-				if (Array.isArray(value)) {
-					vcard[key] = value.slice();
-				}
-				vcard[key] = value;
-			});
-			return vcard;
-		} else {
-			const card = new lib.element.VCard(datas);
+			if (!vid || !lib.vcardOL) {
+				return new lib.element.VCard(datas);
+			}
 			// @ts-expect-error ignore
-			lib.vcardOL[vid] = card;
-			return card;
+			if (vid in lib.vcardOL) {
+				// @ts-expect-error ignore
+				const vcard = lib.vcardOL[vid];
+				//TODO: 这里暂时偷懒 直接用了delete和直接赋值 不妥
+				Object.keys(vcard).forEach(entry => {
+					delete vcard[entry];
+				});
+				Object.keys(datas).forEach(key => {
+					const value = datas[key];
+					if (Array.isArray(value)) {
+						vcard[key] = value.slice();
+					} else {
+						vcard[key] = value;
+					}
+				});
+				return vcard;
+			} else {
+				card = new lib.element.VCard(datas);
+				// @ts-expect-error ignore
+				lib.vcardOL[vid] = card;
+			}
+		} catch (e) {
+			// 网络传来的数据可能损坏,不能让单条坏消息中断整个广播循环
+			console.log(e);
 		}
+		return card || item;
 	}
 	infoVCardsOL(infos) {
 		return Array.from(infos || []).map(get.infoVCardOL);

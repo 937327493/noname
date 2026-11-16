@@ -152,6 +152,17 @@ export function createServer(options: ServerOptions = {}): ServerInstance {
 		create(client: Client, key: string, nickname: string, avatar: string, config: any, mode: string) {
 			if (client.onlineKey !== key) return;
 
+			// remove stale rooms (owner reconnecting with the same key, or re-creating while owning another room),
+			// otherwise overwriting the map entry leaves old members pointing at a detached room object
+			rooms.forEach((room, roomKey) => {
+				if (roomKey === key || room.owner === client) {
+					clients.forEach(c => {
+						if (c.room === room && c !== client) util.sendl(c, "selfclose");
+					});
+					rooms.delete(roomKey);
+				}
+			});
+
 			client.nickname = util.nickname(nickname);
 			client.avatar = avatar;
 
@@ -165,20 +176,23 @@ export function createServer(options: ServerOptions = {}): ServerInstance {
 			util.updateRooms();
 		},
 
-		enter(client: Client, key: string, nickname: string, avatar: string) {
+		enter(client: Client, key: string, nickname: string, avatar: string, reconnectId?: string) {
 			const room = rooms.get(key);
 			if (!room) return util.sendl(client, "enterroomfailed");
+
+			// validate everything before touching client state, so a rejected enter
+			// doesn't leave client.room pointing at a room it never joined
+			if (!room.owner) return util.sendl(client, "enterroomfailed");
+
+			const reconnecting = typeof reconnectId === "string" && reconnectId.length > 0;
+			if (!room.config || (room.config.gameStarted && !reconnecting && (!room.config.observe || !room.config.observeReady))) {
+				return util.sendl(client, "enterroomfailed");
+			}
 
 			client.nickname = util.nickname(nickname);
 			client.avatar = avatar;
 			client.room = room;
 			delete client.status;
-
-			if (!room.owner) return util.sendl(client, "enterroomfailed");
-
-			if (!room.config || (room.config.gameStarted && (!room.config.observe || !room.config.observeReady))) {
-				return util.sendl(client, "enterroomfailed");
-			}
 
 			client.owner = room.owner;
 			util.sendl(room.owner, "onconnection", client.wsid);
@@ -189,6 +203,7 @@ export function createServer(options: ServerOptions = {}): ServerInstance {
 			client.nickname = util.nickname(nickname);
 			client.avatar = avatar;
 			util.updateClients();
+			util.updateRooms();
 		},
 
 		key(client: Client, id: any) {

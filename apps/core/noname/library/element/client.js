@@ -72,6 +72,9 @@ export class Client {
 	 */
 	inited;
 	close() {
+		if (this.closed) {
+			return this;
+		}
 		lib.node.clients.remove(this);
 		lib.node.observing.remove(this);
 		if (ui.removeObserve && !lib.node.observing.length) {
@@ -90,13 +93,16 @@ export class Client {
 				game.onlinezhu = null;
 			}
 			game.updateWaiting();
-		} else if (lib.playerOL[this.id]) {
+		} else if (lib.playerOL[this.id] && lib.playerOL[this.id].ws === this) {
 			var player = lib.playerOL[this.id];
+			var nickname = get.plainText(player.nickname);
 			player.setNickname(player.nickname + " - 离线");
 			// @ts-expect-error ignore
 			game.broadcast(function (player) {
 				player.setNickname(player.nickname + " - 离线");
 			}, player);
+			game.log("玩家 ", `#y${nickname}`, " 已离线，等待重连");
+			game.me.chat(`玩家 <span style="font-weight: bold; color: rgb(126, 180, 255)">${nickname}</span> 已离线，等待重连`);
 			player.unwait("ai");
 		}
 		return this;
