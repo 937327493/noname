@@ -661,27 +661,38 @@ export class UI {
 		if (typeof start != "number") {
 			start = 0;
 		}
-		var str;
-		if (get.is.mobileMe(player) || game.layout == "default" || player.classList.contains("linked")) {
-			str = "translateX(";
-			if (inv) {
-				str += "-";
-			}
-		} else {
-			str = "translateY(";
-		}
-		var num = 0;
-		for (var i = 0; i < nodes.childElementCount; i++) {
-			var node = nodes.childNodes[i];
+		const horizontal = get.is.mobileMe(player) || game.layout == "default" || player.classList.contains("linked");
+		const translate = horizontal ? "translateX" : "translateY";
+		const direction = horizontal && inv ? -1 : 1;
+		const children = nodes.children;
+
+		// 先读取新标记的隐藏样式以保留入场动画，再统一写入布局。
+		for (let i = 0; i < children.length; i++) {
 			if (i < start) {
-				node.style.transform = "";
+				continue;
+			}
+			const node = children[i];
+			if (node.classList.contains("drawinghidden") && !node.classList.contains("removing")) {
+				ui.refresh(node);
+			}
+		}
+		for (let i = 0; i < children.length; i++) {
+			const node = children[i];
+			if (i < start) {
+				if (node.style.transform) {
+					node.style.transform = "";
+				}
 			} else if (node.classList.contains("removing")) {
 				start++;
 			} else {
-				ui.refresh(node);
-				node.classList.remove("drawinghidden");
-				node._transform = str + (i - start) * 28 + "px)";
-				node.style.transform = node._transform;
+				if (node.classList.contains("drawinghidden")) {
+					node.classList.remove("drawinghidden");
+				}
+				const transform = `${translate}(${(i - start) * 28 * direction}px)`;
+				node._transform = transform;
+				if (node.style.transform !== transform) {
+					node.style.transform = transform;
+				}
 			}
 		}
 	}
