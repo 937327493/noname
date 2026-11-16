@@ -2394,26 +2394,19 @@ export class Create {
 			lib.configMenu.appearence.config.custom_button.onclick("skip");
 		}
 
-		if (lib.config.show_statusbar_ios == "overlay") {
-			document.body.classList.add("statusbar");
-		}
 		if (lib.config.keep_awake) {
-			if (window.plugins && window.plugins.insomnia) {
-				window.plugins.insomnia.keepAwake();
-			} else {
-				import("nosleep.js").then(function ({ default: NoSleep }) {
-					var noSleep = new NoSleep();
-					document.addEventListener(
-						lib.config.touchscreen ? "touchend" : "click",
-						function enableNoSleep() {
-							document.removeEventListener(lib.config.touchscreen ? "touchend" : "click", enableNoSleep, false);
-							noSleep.enable();
-							window.noSleep = noSleep;
-						},
-						false
-					);
-				});
-			}
+			import("nosleep.js").then(function ({ default: NoSleep }) {
+				var noSleep = new NoSleep();
+				document.addEventListener(
+					lib.config.touchscreen ? "touchend" : "click",
+					function enableNoSleep() {
+						document.removeEventListener(lib.config.touchscreen ? "touchend" : "click", enableNoSleep, false);
+						noSleep.enable();
+						window.noSleep = noSleep;
+					},
+					false
+				);
+			});
 		}
 		lib.init.js(lib.assetURL + "game", "keyWords", function () {});
 

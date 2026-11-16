@@ -1,5 +1,6 @@
 import { lib, game, get, _status, ui, ai } from "noname";
 import { boot } from "@/init/index.js";
+import browserReady from "@/init/browser.js";
 import { userAgentLowerCase, device } from "@/util/index.js";
 import { loadBuildInfo } from "@/util/meta.js";
 import "core-js-bundle";
@@ -11,17 +12,7 @@ import "vue/dist/vue.esm-browser.prod.js";
 		lib.device = device;
 		window.startupLoading.show("正在准备运行环境…");
 
-		const isElectron = typeof window.require === "function";
-		const isCordovaLike = typeof window.cordova !== "undefined" || typeof window.NonameAndroidBridge !== "undefined" || typeof window.noname_shijianInterfaces !== "undefined";
-		const isNativeClient = isElectron || isCordovaLike || "Capacitor" in window;
-		const loadPlatformFallback = () => {
-			if (isElectron) return import("./init/node.js");
-			if (!import.meta.env.DEV && lib.device !== undefined && isCordovaLike) return import("./init/cordova.js");
-			return import("./init/browser.js");
-		};
-		const path = "/preload.js";
-		const { default: preload } = await (import.meta.env.DEV && !isNativeClient ? loadPlatformFallback() : import(/* @vite-ignore */ path).catch(loadPlatformFallback));
-		await preload({ lib, game, get, _status, ui, ai });
+		await browserReady({ lib, game, get, _status, ui, ai });
 		lib.buildInfo = await loadBuildInfo(url => lib.init.promises.json(url));
 
 		// GPL确认
@@ -55,7 +46,7 @@ ${e instanceof Error ? e.stack : String(e)}
 1. 游戏文件是否完整（重新下载完整包）
 2. 客户端是否需要更新
 3. 浏览器是否需要更新
-4. 若您直接打开index.html进行游戏，请改为运行文件夹内的noname-server.exe
+4. 若您直接打开 index.html，请通过网站地址访问游戏
 5. 若以上步骤均无法解决问题，请及时向开发组反馈`);
 	}
 })();

@@ -80,6 +80,9 @@ async function main() {
 	if (previousOutput?.isSymbolicLink()) throw new Error(`构建目录不能是符号链接：${outputDir}`);
 	await rm(outputDir, { recursive: true, force: true });
 	await buildSelf(target, importMap, staticModules);
+	for (const file of ["cordova.js", "node.js"]) {
+		await rm(join(outputDir, "src", "noname", "init", file), { force: true });
+	}
 
 	// 编译脱离本体单独输出的包体
 	for (const [type, content] of Object.entries(individuals)) {

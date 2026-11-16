@@ -603,20 +603,10 @@ export class Click {
 		}
 		if (ui.shortcut.classList.contains("hidden")) {
 			ui.favmode.style.display = "none";
-			if (window.StatusBar && lib.config.show_statusbar_ios == "auto") {
-				document.body.classList.remove("statusbar");
-				window.StatusBar.hide();
-			}
 			ui.window.classList.remove("shortcutpaused");
 		} else {
 			if (lib.config.show_favmode) {
 				ui.favmode.style.display = "";
-			}
-			if (window.StatusBar && lib.config.show_statusbar_ios == "auto") {
-				document.body.classList.add("statusbar");
-				window.StatusBar.overlaysWebView(true);
-				window.StatusBar.backgroundColorByName("black");
-				window.StatusBar.show();
 			}
 			if (_status.auto) {
 				ui.shortcut.autobutton.classList.add("active");

@@ -546,37 +546,9 @@ export const extensionMenu = function (connectMenu) {
 			buttonExport.style.marginRight = "2px";
 			buttonExport.style.display = "none";
 			buttonExport.onclick = function () {
-				function oldExport() {
-					processExtension(true);
-					if (lib.config.show_extensionshare) {
-						shareExtLine.style.display = "";
-					}
-				}
-				if (typeof game.readFile == "function" && window.noname_shijianInterfaces && typeof window.noname_shijianInterfaces.shareExtensionWithPassWordAsync == "function" && confirm("是否使用诗笺版自带的导出功能来导出扩展？")) {
-					const extName = inputExtName.value;
-					if (!extName) {
-						alert("未检测到扩展名，将使用无名杀自带的导出功能");
-						oldExport();
-						return;
-					}
-					game.readFile(
-						`extension/${extName}/extension.js`,
-						() => {
-							const pwd = prompt("请输入压缩包密码，不设密码直接点确定");
-							let result;
-							if (pwd === "" || pwd === null) {
-								window.noname_shijianInterfaces.shareExtensionAsync(extName);
-							} else {
-								window.noname_shijianInterfaces.shareExtensionWithPassWordAsync(extName, pwd);
-							}
-						},
-						() => {
-							alert("未检测到扩展文件，将使用无名杀自带的导出功能");
-							oldExport();
-						}
-					);
-				} else {
-					oldExport();
+				processExtension(true);
+				if (lib.config.show_extensionshare) {
+					shareExtLine.style.display = "";
 				}
 			};
 			inputExtLine.appendChild(buttonExport);
@@ -585,18 +557,11 @@ export const extensionMenu = function (connectMenu) {
 			exportExtLine.style.width = "calc(100% - 40px)";
 			exportExtLine.style.textAlign = "left";
 			exportExtLine.style.marginBottom = "5px";
-			if (lib.device == "ios") {
-				exportExtLine.innerHTML = '已保存。退出游戏并重新打开后生效<span class="closenode">×</span>';
-				exportExtLine.querySelectorAll("span")[0].onclick = function () {
-					exportExtLine.style.display = "none";
-				};
-			} else {
-				exportExtLine.innerHTML = '重启后生效。<span class="hrefnode">立即重启</span><span class="closenode">×</span>';
-				exportExtLine.querySelectorAll("span")[0].onclick = game.reload;
-				exportExtLine.querySelectorAll("span")[1].onclick = function () {
-					exportExtLine.style.display = "none";
-				};
-			}
+			exportExtLine.innerHTML = '刷新后生效。<span class="hrefnode">立即刷新</span><span class="closenode">×</span>';
+			exportExtLine.querySelectorAll("span")[0].onclick = game.reload;
+			exportExtLine.querySelectorAll("span")[1].onclick = function () {
+				exportExtLine.style.display = "none";
+			};
 
 			var shareExtLine = ui.create.div(pageboard);
 			shareExtLine.style.display = "none";

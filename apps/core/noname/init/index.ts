@@ -85,8 +85,6 @@ export async function boot() {
 				game.saveConfig("fold_mode", false);
 				if (ua.indexOf("ipad") == -1) {
 					game.saveConfig("phonelayout", true);
-				} else if (lib.device === "ios") {
-					game.saveConfig("show_statusbar_ios", "overlay");
 				}
 			} else if (confirm("是否切换到触屏模式？（触屏模式可提高触屏设备的响应速度，但无法使用鼠标）")) {
 				game.saveConfig("touchscreen", true);

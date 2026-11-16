@@ -24,7 +24,7 @@
 
 - [Node.js](https://nodejs.org/) ^20.19.0 || >=22.12.0
 - [pnpm](https://pnpm.io/) >= 9
-- Webview: Chromium >= 91 || Safari >=16.4.0 (暂不支持Firefox)
+- 浏览器：Chromium >= 91 或 Safari >= 16.4.0（暂不支持 Firefox）
 
 ### 安装依赖
 
@@ -50,15 +50,7 @@ pnpm dev
 
 [《无名杀》项目 Pull Request 提交规范](https://github.com/libnoname/noname/wiki/%E3%80%8A%E6%97%A0%E5%90%8D%E6%9D%80%E3%80%8B%E9%A1%B9%E7%9B%AE-Pull-Request-%E6%8F%90%E4%BA%A4%E8%A7%84%E8%8C%83)
 
-客户端下载戳这里：
-
-安卓： <https://github.com/nonameShijian/noname-shijian-android/releases/tag/v1.6.8>
-
-PC:  <https://github.com/nonameShijian/noname/releases/tag/v1.75>
-
-网页端推荐使用 Chrome 系内核浏览器游玩，暂不支持 Firefox 浏览器
-
-请尽量保证游玩的 Chrome 系浏览器或手机 Webview 的`内核版本大于等于91`
+本项目通过网页运行。电脑或手机可用支持的浏览器打开部署地址。
 
 ---
 

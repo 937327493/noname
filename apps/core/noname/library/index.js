@@ -1037,9 +1037,7 @@ export class Library {
 					onclick(bool) {
 						game.saveConfig("keep_awake", bool);
 						if (bool) {
-							if (window.plugins && window.plugins.insomnia) {
-								window.plugins.insomnia.keepAwake();
-							} else if (window.noSleep) {
+							if (window.noSleep) {
 								document.addEventListener(
 									lib.config.touchscreen ? "touchend" : "click",
 									function enableNoSleepX() {
@@ -1049,12 +1047,8 @@ export class Library {
 									false
 								);
 							}
-						} else {
-							if (window.plugins && window.plugins.insomnia) {
-								window.plugins.insomnia.allowSleepAgain();
-							} else if (window.noSleep) {
-								window.noSleep.disable();
-							}
+						} else if (window.noSleep) {
+							window.noSleep.disable();
 						}
 					},
 				},
@@ -1478,10 +1472,8 @@ export class Library {
 							return;
 						}
 						if (bool) {
-							window.noname_shijianInterfaces?.showDebugButton?.();
 							lib.cheat.i();
 						} else {
-							window.noname_shijianInterfaces?.hideDebugButton?.();
 							delete window.cheat;
 							delete window.game;
 							delete window.ui;
@@ -4109,25 +4101,6 @@ export class Library {
 					} else {
 						map.pop_logv.show();
 					}
-					if (lib.device) {
-						if (lib.device == "android") {
-							map.show_statusbar_android.show();
-							map.show_statusbar_ios.hide();
-						} else if (lib.device == "ios") {
-							map.show_statusbar_ios.show();
-							map.show_statusbar_android.hide();
-						}
-						if (!game.download) {
-							setTimeout(function () {
-								if (!window.StatusBar) {
-									// map.show_statusbar.hide();
-								}
-							}, 5000);
-						}
-					} else {
-						map.show_statusbar_ios.hide();
-						map.show_statusbar_android.hide();
-					}
 					if (get.is.phoneLayout()) {
 						map.remember_round_button.show();
 						map.popequip.show();
@@ -4300,53 +4273,6 @@ export class Library {
 					name: "显示游戏时间",
 					init: false,
 					unfrequent: true,
-				},
-				show_statusbar_android: {
-					name: "显示状态栏",
-					init: false,
-					unfrequent: true,
-					onclick(bool) {
-						game.saveConfig("show_statusbar_android", bool);
-						if (window.StatusBar && lib.device == "android") {
-							if (bool) {
-								window.StatusBar.overlaysWebView(false);
-								window.StatusBar.backgroundColorByName("black");
-								window.StatusBar.show();
-							} else {
-								window.StatusBar.hide();
-							}
-						}
-					},
-				},
-				show_statusbar_ios: {
-					name: "显示状态栏",
-					init: "off",
-					unfrequent: true,
-					item: {
-						default: "默认",
-						overlay: "嵌入",
-						auto: "自动",
-						off: "关闭",
-					},
-					onclick(bool) {
-						game.saveConfig("show_statusbar_ios", bool);
-						if (window.StatusBar && lib.device == "ios") {
-							if (bool != "off" && bool != "auto") {
-								if (lib.config.show_statusbar_ios == "default") {
-									window.StatusBar.overlaysWebView(false);
-									document.body.classList.remove("statusbar");
-								} else {
-									window.StatusBar.overlaysWebView(true);
-									document.body.classList.add("statusbar");
-								}
-								window.StatusBar.backgroundColorByName("black");
-								window.StatusBar.show();
-							} else {
-								document.body.classList.remove("statusbar");
-								window.StatusBar.hide();
-							}
-						}
-					},
 				},
 				show_card_prompt: {
 					name: "显示出牌信息",
